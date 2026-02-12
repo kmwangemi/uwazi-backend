@@ -13,10 +13,12 @@ from app.core.database import Base
 
 
 class UserRole(str, PyEnum):
-    ADMIN = "admin"
-    INVESTIGATOR = "investigator"
-    ANALYST = "analyst"
-    PUBLIC = "public"
+    """User role enum with uppercase names and lowercase values"""
+
+    ADMIN = "ADMIN"
+    INVESTIGATOR = "INVESTIGATOR"
+    ANALYST = "ANALYST"
+    PUBLIC = "PUBLIC"
 
 
 class User(Base):
@@ -44,8 +46,9 @@ class User(Base):
     )
     hashed_password: Mapped[str] = mapped_column(String(355), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="userrole", create_constraint=True, validate_strings=True),
+        Enum(UserRole, name="userrole", native_enum=False),
         nullable=False,
+        default=UserRole.PUBLIC,
     )
     profile_picture_url: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True
