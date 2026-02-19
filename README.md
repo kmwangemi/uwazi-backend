@@ -1,15 +1,19 @@
 # uwazi-backend
+
 Backend API for Uwazi - Kenya's AI-powered procurement monitoring and anti-corruption system. Detects price inflation, ghost suppliers, tailored specifications, and corrupt networks in public tenders worth KSh 1.5T annually. Saves taxpayers billions through intelligent oversight. Built with FastAPI, PostgreSQL, spaCy, NetworkX, Redis.
 
 ## Install required packages
 
 ### 1. Install uv (if not already installed)
+
 ```bash
 pip install uv
 ```
 
 ### 2. Install dependencies
+
 `uv` automatically manages virtual environments and dependencies.
+
 ```bash
 uv sync
 ```
@@ -19,6 +23,7 @@ This will create a virtual environment and install all packages from your `pypro
 ### 3. Set up environment variables
 
 Create a `.env` file in the project root with your database configuration:
+
 ```bash
 DATABASE_URL=postgresql://user:password@localhost:5432/your_database
 SECRET_KEY=your-secret-key-here
@@ -28,6 +33,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ### 4. Initialize Alembic (First time only)
 
 If Alembic is not yet set up in the project:
+
 ```bash
 alembic init alembic
 ```
@@ -37,6 +43,7 @@ Then configure `alembic/env.py` to import your models and database settings.
 ### 5. Run database migrations
 
 Apply all pending migrations to set up your database schema:
+
 ```bash
 alembic upgrade head
 ```
@@ -46,6 +53,7 @@ alembic upgrade head
 ## 6. Running project in your dev machine
 
 Run
+
 ```bash
 uv run fastapi dev app/main.py
 ```
@@ -55,21 +63,25 @@ Access it at `localhost:8000`
 ## Working with Database Migrations
 
 ### Creating a new migration after model changes
+
 ```bash
 alembic revision --autogenerate -m "description of changes"
 ```
 
 ### Applying migrations
+
 ```bash
 alembic upgrade head
 ```
 
 ### Rolling back a migration
+
 ```bash
 alembic downgrade -1
 ```
 
 ### Check current migration status
+
 ```bash
 alembic current
 ```
