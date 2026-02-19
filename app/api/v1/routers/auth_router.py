@@ -144,8 +144,19 @@ async def login(
         expires_delta=access_token_expires,
     )
     return TokenResponse(
-        access_token=access_token,
+        token=access_token,
         token_type="bearer",
+        user=UserResponse(
+            id=existing_user.id,
+            first_name=existing_user.first_name,
+            last_name=existing_user.last_name,
+            email=existing_user.email,
+            phone_number=existing_user.phone_number,
+            role=existing_user.role,
+            profile_picture_url=existing_user.profile_picture_url,
+            created_at=existing_user.created_at,
+            updated_at=existing_user.updated_at,
+        ),
     )
 
 
@@ -165,7 +176,7 @@ async def create_user(
         if existing_email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A user with the email already exists.",
+                detail="A user with this email already exists.",
             )
         # Create new user
         new_user = User(
@@ -194,7 +205,8 @@ async def create_user(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create claim.",
+            detail="Failed to create user.",
+            # detail=str(e),  # temporarily show real error
         ) from e
 
 
