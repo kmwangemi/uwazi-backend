@@ -26,6 +26,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+
 # API Prefixes
 BASE_URL_PREFIX = "/api/v1"
 # Include API Routes
