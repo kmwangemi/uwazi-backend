@@ -41,7 +41,6 @@ async def create_tender(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A tender with this reference number already exists.",
             )
-
         new_tender = Tender(
             **tender_data.model_dump(),
             created_by=current_user.id,
@@ -50,7 +49,6 @@ async def create_tender(
         await db.commit()
         await db.refresh(new_tender)
         return new_tender
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:
@@ -83,7 +81,6 @@ async def list_tenders(
     limit: int = Query(50, ge=1, le=200),
 ):
     query = select(Tender)
-
     # Search across tender_number, title, procuring_entity
     if search:
         term = f"%{search.strip()}%"
@@ -94,7 +91,6 @@ async def list_tenders(
                 Tender.procuring_entity.ilike(term),
             )
         )
-
     # Filters
     if status is not None:
         query = query.filter(Tender.status == status)
@@ -106,7 +102,6 @@ async def list_tenders(
         query = query.filter(Tender.category.ilike(f"%{category}%"))
     if is_flagged is not None:
         query = query.filter(Tender.is_flagged == is_flagged)
-
     query = query.order_by(Tender.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
@@ -148,15 +143,12 @@ async def update_tender(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Tender not found.",
             )
-
         update_data = tender_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(tender, field, value)
-
         await db.commit()
         await db.refresh(tender)
         return tender
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:
@@ -184,10 +176,8 @@ async def delete_tender(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Tender not found.",
             )
-
         await db.delete(tender)
         await db.commit()
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:

@@ -43,13 +43,11 @@ async def create_supplier(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A supplier with this registration number already exists.",
             )
-
         new_supplier = Supplier(**supplier_data.model_dump())
         db.add(new_supplier)
         await db.commit()
         await db.refresh(new_supplier)
         return new_supplier
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:
@@ -95,7 +93,6 @@ async def list_suppliers(
     limit: int = Query(50, ge=1, le=200),
 ):
     query = select(Supplier)
-
     # Search across name, registration_number, county
     if search:
         term = f"%{search.strip()}%"
@@ -106,7 +103,6 @@ async def list_suppliers(
                 Supplier.county.ilike(term),
             )
         )
-
     # Filters
     if is_verified is not None:
         query = query.filter(Supplier.is_verified == is_verified)
@@ -124,7 +120,6 @@ async def list_suppliers(
         query = query.filter(Supplier.agpo_group == agpo_group)
     if supply_category is not None:
         query = query.filter(Supplier.supply_category.ilike(f"%{supply_category}%"))
-
     query = query.order_by(Supplier.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
@@ -166,7 +161,6 @@ async def update_supplier(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Supplier not found.",
             )
-
         update_data = supplier_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(supplier, field, value)
@@ -174,7 +168,6 @@ async def update_supplier(
         await db.commit()
         await db.refresh(supplier)
         return supplier
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:
@@ -202,10 +195,8 @@ async def delete_supplier(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Supplier not found.",
             )
-
         await db.delete(supplier)
         await db.commit()
-
     except HTTPException:
         raise
     except SQLAlchemyError as e:
