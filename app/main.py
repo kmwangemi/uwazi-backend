@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.routers.auth_router import auth_router
+from app.api.v1.routers.tender_router import tender_router
+from app.api.v1.routers.supplier_router import supplier_router
 
 app = FastAPI(
     title="Uwazi API",
@@ -38,4 +40,14 @@ app.include_router(
     auth_router,
     prefix=f"{BASE_URL_PREFIX}",
     tags=["Users - Authentication"],
+)
+app.include_router(
+    tender_router,
+    prefix=f"{BASE_URL_PREFIX}/tenders",
+    tags=["Tenders"],
+)
+app.include_router(
+    supplier_router,
+    prefix=f"{BASE_URL_PREFIX}/suppliers",
+    tags=["Suppliers"],
 )
