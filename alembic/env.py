@@ -20,12 +20,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-
 # Metadata for Alembic's autogenerate
 target_metadata = Base.metadata
 
 
-# ✅ Use DATABASE_URL from .env
 def get_url():
     url = os.getenv("DATABASE_URL")
     if not url:
@@ -33,7 +31,6 @@ def get_url():
     return url
 
 
-# 🟠 Offline migrations
 def run_migrations_offline():
     url = get_url()
     context.configure(
@@ -41,17 +38,20 @@ def run_migrations_offline():
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
 
-# 🟢 Online (async) migrations
 def do_run_migrations(connection):
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        compare_type=True,  # detect column type changes
+        include_schemas=True,
+        include_object=lambda obj, name, type_, reflected, compare_to: True,
     )
 
     with context.begin_transaction():
