@@ -101,6 +101,7 @@ class Tender(Base):
     )
     # ── Extracted / Structured Data ───────────────────────────────────────────
     items: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    attachments: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     specifications: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     bidders: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # ── Metadata ──────────────────────────────────────────────────────────────

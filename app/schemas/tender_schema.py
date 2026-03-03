@@ -7,6 +7,14 @@ from pydantic import BaseModel, Field
 from app.models.enums_model import RiskLevel, TenderStatus
 
 
+class TenderAttachment(BaseModel):
+    url: str
+    public_id: str
+    file_name: str
+    file_type: Optional[str] = None
+    size: Optional[int] = None
+
+
 class TenderCreate(BaseModel):
     tender_number: str
     title: str
@@ -36,6 +44,7 @@ class TenderCreate(BaseModel):
     publication_date: Optional[date] = Field(default=None, alias="publicationDate")
     deadline: Optional[date] = None
     opening_date: Optional[date] = Field(default=None, alias="openingDate")
+    attachments: Optional[list[TenderAttachment]] = []  # populated after upload
 
     model_config = {
         "from_attributes": True,

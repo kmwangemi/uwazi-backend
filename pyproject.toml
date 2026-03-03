@@ -9,10 +9,12 @@ dependencies = [
     "alembic>=1.18.3",
     "apscheduler>=3.11.2",
     "asyncpg>=0.31.0",
+    "cloudinary>=1.44.1",
     "fastapi[standard]>=0.128.0",
     "psycopg2-binary>=2.9.11",
     "pwdlib[argon2]>=0.3.0",
     "pydantic-settings>=2.12.0",
     "pyjwt>=2.11.0",
+    "python-multipart>=0.0.22",
     "sqlalchemy>=2.0.46",
 ]
