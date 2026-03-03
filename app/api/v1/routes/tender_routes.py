@@ -23,9 +23,9 @@ DbDependency = Annotated[AsyncSession, Depends(get_db)]
     status_code=status.HTTP_201_CREATED,
 )
 async def create_tender(
+    db: DbDependency,
     data: str = Form(...),
     attachments: list[UploadFile] = File(default=[]),
-    db: DbDependency = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     tender_data = TenderCreate(**json.loads(data))
