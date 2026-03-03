@@ -1,24 +1,18 @@
 import uuid
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
-from sqlalchemy.exc import SQLAlchemyError
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.enums_model import RiskLevel
-from app.models.supplier_model import Supplier
 from app.schemas.supplier_schema import SupplierCreate, SupplierResponse, SupplierUpdate
+from app.services import supplier_service
 
 supplier_router = APIRouter()
 
 DbDependency = Annotated[AsyncSession, Depends(get_db)]
-
-
-# ─── Create ───────────────────────────────────────────────────────────────────
 
 
 @supplier_router.post(
@@ -31,45 +25,15 @@ async def create_supplier(
     db: DbDependency,
     current_user=Depends(get_current_user),
 ):
-    try:
-        # Check for duplicate registration number
-        result = await db.execute(
-            select(Supplier).filter(
-                Supplier.registration_number == supplier_data.registration_number
-            )
-        )
-        if result.scalars().first():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A supplier with this registration number already exists.",
-            )
-        new_supplier = Supplier(**supplier_data.model_dump())
-        db.add(new_supplier)
-        await db.commit()
-        await db.refresh(new_supplier)
-        return new_supplier
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create supplier.",
-        ) from e
-
-
-# ─── List / Search / Filter ───────────────────────────────────────────────────
+    return await supplier_service.create_supplier(db, supplier_data)
 
 
 @supplier_router.get("/", response_model=list[SupplierResponse])
 async def list_suppliers(
     db: DbDependency,
-    # Search
     search: Optional[str] = Query(
-        None,
-        description="Search by supplier name, registration number, or county",
+        None, description="Search by name, registration number, or county"
     ),
-    # Filters
     is_verified: Optional[bool] = Query(
         None, description="Filter by verification status"
     ),
@@ -88,62 +52,28 @@ async def list_suppliers(
     supply_category: Optional[str] = Query(
         None, description="Filter by supply category"
     ),
-    # Pagination
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
-    query = select(Supplier)
-    # Search across name, registration_number, county
-    if search:
-        term = f"%{search.strip()}%"
-        query = query.filter(
-            or_(
-                Supplier.name.ilike(term),
-                Supplier.registration_number.ilike(term),
-                Supplier.county.ilike(term),
-            )
-        )
-    # Filters
-    if is_verified is not None:
-        query = query.filter(Supplier.is_verified == is_verified)
-    if is_blacklisted is not None:
-        query = query.filter(Supplier.is_blacklisted == is_blacklisted)
-    if is_ghost_likely is not None:
-        query = query.filter(Supplier.is_ghost_likely == is_ghost_likely)
-    if tax_compliant is not None:
-        query = query.filter(Supplier.tax_compliant == tax_compliant)
-    if risk_level is not None:
-        query = query.filter(Supplier.risk_level == risk_level)
-    if county is not None:
-        query = query.filter(Supplier.county.ilike(f"%{county}%"))
-    if agpo_group is not None:
-        query = query.filter(Supplier.agpo_group == agpo_group)
-    if supply_category is not None:
-        query = query.filter(Supplier.supply_category.ilike(f"%{supply_category}%"))
-    query = query.order_by(Supplier.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(query)
-    return result.scalars().all()
-
-
-# ─── Get by ID ────────────────────────────────────────────────────────────────
+    return await supplier_service.list_suppliers(
+        db=db,
+        search=search,
+        is_verified=is_verified,
+        is_blacklisted=is_blacklisted,
+        is_ghost_likely=is_ghost_likely,
+        tax_compliant=tax_compliant,
+        risk_level=risk_level,
+        county=county,
+        agpo_group=agpo_group,
+        supply_category=supply_category,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @supplier_router.get("/{supplier_id}", response_model=SupplierResponse)
-async def get_supplier(
-    supplier_id: uuid.UUID,
-    db: DbDependency,
-):
-    result = await db.execute(select(Supplier).filter(Supplier.id == supplier_id))
-    supplier = result.scalars().first()
-    if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier not found.",
-        )
-    return supplier
-
-
-# ─── Update ───────────────────────────────────────────────────────────────────
+async def get_supplier(supplier_id: uuid.UUID, db: DbDependency):
+    return await supplier_service.get_supplier_by_id(db, supplier_id)
 
 
 @supplier_router.patch("/{supplier_id}", response_model=SupplierResponse)
@@ -153,32 +83,7 @@ async def update_supplier(
     db: DbDependency,
     current_user=Depends(get_current_user),
 ):
-    try:
-        result = await db.execute(select(Supplier).filter(Supplier.id == supplier_id))
-        supplier = result.scalars().first()
-        if not supplier:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supplier not found.",
-            )
-        update_data = supplier_data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(supplier, field, value)
-
-        await db.commit()
-        await db.refresh(supplier)
-        return supplier
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update supplier.",
-        ) from e
-
-
-# ─── Delete ───────────────────────────────────────────────────────────────────
+    return await supplier_service.update_supplier(db, supplier_id, supplier_data)
 
 
 @supplier_router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -187,21 +92,4 @@ async def delete_supplier(
     db: DbDependency,
     current_user=Depends(get_current_user),
 ):
-    try:
-        result = await db.execute(select(Supplier).filter(Supplier.id == supplier_id))
-        supplier = result.scalars().first()
-        if not supplier:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supplier not found.",
-            )
-        await db.delete(supplier)
-        await db.commit()
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete supplier.",
-        ) from e
+    await supplier_service.delete_supplier(db, supplier_id)
