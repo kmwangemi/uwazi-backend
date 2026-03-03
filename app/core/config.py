@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000",
-        "https://afya-guard-frontend.vercel.app",
+        "https://uwazi-frontend-two.vercel.app",
     ]
     # ── Fraud Scoring Thresholds ──────────────────────────────────────────────
     FRAUD_MEDIUM_THRESHOLD: float = 40.0
