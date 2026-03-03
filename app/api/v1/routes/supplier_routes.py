@@ -16,7 +16,7 @@ DbDependency = Annotated[AsyncSession, Depends(get_db)]
 
 
 @supplier_router.post(
-    "/",
+    "/suppliers",
     response_model=SupplierResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -28,7 +28,7 @@ async def create_supplier(
     return await supplier_service.create_supplier(db, supplier_data)
 
 
-@supplier_router.get("/", response_model=list[SupplierResponse])
+@supplier_router.get("/suppliers", response_model=list[SupplierResponse])
 async def list_suppliers(
     db: DbDependency,
     search: Optional[str] = Query(
@@ -71,12 +71,12 @@ async def list_suppliers(
     )
 
 
-@supplier_router.get("/{supplier_id}", response_model=SupplierResponse)
+@supplier_router.get("/suppliers/{supplier_id}", response_model=SupplierResponse)
 async def get_supplier(supplier_id: uuid.UUID, db: DbDependency):
     return await supplier_service.get_supplier_by_id(db, supplier_id)
 
 
-@supplier_router.patch("/{supplier_id}", response_model=SupplierResponse)
+@supplier_router.patch("/suppliers/{supplier_id}", response_model=SupplierResponse)
 async def update_supplier(
     supplier_id: uuid.UUID,
     supplier_data: SupplierUpdate,
@@ -86,7 +86,9 @@ async def update_supplier(
     return await supplier_service.update_supplier(db, supplier_id, supplier_data)
 
 
-@supplier_router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
+@supplier_router.delete(
+    "/suppliers/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_supplier(
     supplier_id: uuid.UUID,
     db: DbDependency,
