@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
 
 from app.models.enums_model import RiskLevel, TenderStatus
 
@@ -11,72 +11,64 @@ class TenderCreate(BaseModel):
     tender_number: str
     title: str
     description: Optional[str] = None
-    entity_name: str = Field(..., alias="entityName")  # was procuring_entity
-    entity_type: Optional[str] = Field(None, alias="entityType")
+    technical_requirements: Optional[str] = None
+    # Procuring entity — matches model column `entity_name`
+    entity_name: str = Field(alias="entityName")
+    entity_type: Optional[str] = Field(default=None, alias="entityType")
+    # Classification
     category: Optional[str] = None
-    procurement_method: Optional[str] = Field(None, alias="procurementMethod")
-    amount: float = Field(..., gt=0)
+    procurement_method: Optional[str] = Field(default=None, alias="procurementMethod")
+    # Financial
+    amount: float
     currency: str = "KES"
-    source_of_funds: Optional[str] = Field(None, alias="sourceOfFunds")
-    tender_security_form: Optional[str] = Field(None, alias="tenderSecurityForm")
-    tender_security_amount: Optional[float] = Field(None, alias="tenderSecurityAmount")
+    source_of_funds: Optional[str] = Field(default=None, alias="sourceOfFunds")
+    # Tender security
+    tender_security_form: Optional[str] = Field(
+        default=None, alias="tenderSecurityForm"
+    )
+    tender_security_amount: Optional[float] = Field(
+        default=None, alias="tenderSecurityAmount"
+    )
+    # Location & contact
     county: Optional[str] = None
-    contact_email: Optional[EmailStr] = Field(None, alias="contactEmail")
-    publication_date: Optional[date] = None
-    deadline: Optional[date] = Field(None, alias="deadline")  # was submission_deadline
-    opening_date: Optional[date] = Field(None, alias="openingDate")
-    declaration_accepted: bool = Field(..., alias="declarationAccepted")
+    contact_email: Optional[str] = Field(default=None, alias="contactEmail")
+    # Dates — matches model column `deadline`
+    publication_date: Optional[date] = Field(default=None, alias="publicationDate")
+    deadline: Optional[date] = None
+    opening_date: Optional[date] = Field(default=None, alias="openingDate")
 
-    @field_validator("declaration_accepted")
-    @classmethod
-    def must_accept(cls, v: bool) -> bool:
-        if not v:
-            raise ValueError("Compliance declaration must be accepted")
-        return v
-
-    @model_validator(mode="after")
-    def opening_after_deadline(self) -> "TenderCreate":
-        if self.deadline and self.opening_date:
-            if self.opening_date <= self.deadline:
-                raise ValueError("opening_date must be after deadline")
-        return self
-
-    model_config = {"from_attributes": True, "populate_by_name": True}
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True,  # allows both snake_case and camelCase
+    }
 
 
 class TenderUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     technical_requirements: Optional[str] = None
-    procuring_entity: Optional[str] = None
+    entity_name: Optional[str] = None  # was procuring_entity
     entity_type: Optional[str] = None
     category: Optional[str] = None
     procurement_method: Optional[str] = None
-    amount: Optional[float] = Field(None, gt=0)
+    amount: Optional[float] = None
     currency: Optional[str] = None
     source_of_funds: Optional[str] = None
     tender_security_form: Optional[str] = None
-    tender_security_amount: Optional[float] = Field(None, ge=0)
+    tender_security_amount: Optional[float] = None
     county: Optional[str] = None
-    contact_email: Optional[EmailStr] = None
+    contact_email: Optional[str] = None
     publication_date: Optional[date] = None
-    submission_deadline: Optional[date] = None
+    deadline: Optional[date] = None  # was submission_deadline
     opening_date: Optional[date] = None
     award_date: Optional[date] = None
     awarded_supplier_id: Optional[uuid.UUID] = None
     status: Optional[TenderStatus] = None
-    risk_score: Optional[int] = Field(None, ge=0, le=100)
+    risk_score: Optional[int] = None
     risk_level: Optional[RiskLevel] = None
     is_flagged: Optional[bool] = None
 
-    @model_validator(mode="after")
-    def opening_date_after_deadline(self) -> "TenderUpdate":
-        if self.submission_deadline and self.opening_date:
-            if self.opening_date <= self.submission_deadline:
-                raise ValueError("opening_date must be after submission_deadline")
-        return self
-
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class TenderResponse(BaseModel):
@@ -84,6 +76,7 @@ class TenderResponse(BaseModel):
     tender_number: str
     title: str
     description: Optional[str] = None
+    technical_requirements: Optional[str] = None
     entity_name: str  # was procuring_entity
     entity_type: Optional[str] = None
     category: Optional[str] = None
