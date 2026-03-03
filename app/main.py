@@ -1,53 +1,83 @@
+"""
+Procurement Platform — Main Application
+
+Assembles all routes under /api/v1 prefix.
+Run with: uvicorn app.main:app --reload
+"""
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1.routers.auth_router import auth_router
-from app.api.v1.routers.tender_router import tender_router
-from app.api.v1.routers.supplier_router import supplier_router
+# Logging MUST be set up before any import that logs
+from app.core.logger import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger(__name__)
+
+from app.api.v1.routes.auth_routes import auth_router
+from app.api.v1.routes.supplier_routes import supplier_router
+from app.api.v1.routes.tender_routes import tender_router
+from app.api.v1.routes.user_routes import user_router
+from app.core.config import settings
+from app.core.scheduler import start_scheduler, stop_scheduler
+from app.middleware.logger_middleware import RequestLoggingMiddleware
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(
+        "Procurement system API starting",
+        extra={"version": settings.APP_VERSION, "environment": settings.ENVIRONMENT},
+    )
+    start_scheduler()
+    yield
+    stop_scheduler()
+    logger.info("Procurement system API shut down")
+
 
 app = FastAPI(
-    title="Uwazi API",
-    version="0.1.0",
-    description="API for Uwazi application",
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description=(
+        "Production-grade procurement platform for Kenya. "
+        "Hybrid rule + ML scoring engine with full explainability, case management, and audit trails."
+    ),
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# CORS Configuration
-origins = [
-    "http://localhost:3000",
-    "https://uwazi-frontend-two.vercel.app",
-]  # Add frontend domains here
-
+# ── Middleware ──────────────────────────────────────────────────────────────────────
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ── Routers ───────────────────────────────────────────────────────────────────
+PREFIX = "/api/v1"
 
-@app.get("/health")
-async def health_check():
+app.include_router(auth_router, prefix=PREFIX)
+app.include_router(user_router, prefix=PREFIX)
+app.include_router(tender_router, prefix=PREFIX)
+app.include_router(supplier_router, prefix=PREFIX)
+
+
+@app.get("/", tags=["Health"])
+def root():
+    return {
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "status": "running",
+        "docs": "/docs",
+    }
+
+
+@app.get("/health", tags=["Health"])
+def health():
     return {"status": "ok"}
-
-
-# API Prefixes
-BASE_URL_PREFIX = "/api/v1"
-# Include API Routes
-app.include_router(
-    auth_router,
-    prefix=f"{BASE_URL_PREFIX}",
-    tags=["Users - Authentication"],
-)
-app.include_router(
-    tender_router,
-    prefix=f"{BASE_URL_PREFIX}/tenders",
-    tags=["Tenders"],
-)
-app.include_router(
-    supplier_router,
-    prefix=f"{BASE_URL_PREFIX}/suppliers",
-    tags=["Suppliers"],
-)
