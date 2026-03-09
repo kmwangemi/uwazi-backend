@@ -18,10 +18,9 @@ logger = get_logger(__name__)
 
 
 def _generate_entity_code(entity_name: str, entity_type: str) -> str:
-    """Derive a stable code from name + type, e.g. MOH-MINISTRY."""
     slug = re.sub(r"[^A-Z0-9]", "", entity_name.upper())[:8]
-    return f"{slug}-{entity_type[:3]}"
-
+    type_slug = re.sub(r"[^A-Z0-9]", "", entity_type.upper())[:6]  # clean + uppercase
+    return f"{slug}-{type_slug}"
 
 async def get_or_create_entity(
     db: AsyncSession,
