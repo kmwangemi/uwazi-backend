@@ -30,8 +30,13 @@ async def create_tender(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A tender with this reference number already exists.",
             )
+        # new_tender = Tender(
+        #     **tender_data.model_dump(),
+        #     created_by=created_by,
+        #     attachments=attachments or [],
+        # )
         new_tender = Tender(
-            **tender_data.model_dump(),
+            **tender_data.model_dump(exclude={"attachments"}),
             created_by=created_by,
             attachments=attachments or [],
         )

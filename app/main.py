@@ -17,6 +17,7 @@ setup_logging()
 logger = get_logger(__name__)
 
 from app.api.v1.routes.auth_routes import auth_router
+from app.api.v1.routes.bid_routes import bid_router
 from app.api.v1.routes.supplier_routes import supplier_router
 from app.api.v1.routes.tender_routes import tender_router
 from app.api.v1.routes.user_routes import user_router
@@ -66,6 +67,7 @@ app.include_router(auth_router, prefix=PREFIX)
 app.include_router(user_router, prefix=PREFIX)
 app.include_router(tender_router, prefix=PREFIX)
 app.include_router(supplier_router, prefix=PREFIX)
+app.include_router(bid_router, prefix=PREFIX)
 
 
 @app.get("/", tags=["Health"])

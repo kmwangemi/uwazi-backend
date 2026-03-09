@@ -125,6 +125,7 @@ class Tender(Base):
     analysis_results = relationship(
         "AnalysisResult", back_populates="tender", cascade="all, delete-orphan"
     )
+    bids = relationship("Bid", back_populates="tender", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Tender(id={self.id}, tender_number={self.tender_number}, status={self.status})>"
