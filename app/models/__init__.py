@@ -29,6 +29,8 @@ from app.models.supplier_verification_check_model import SupplierVerificationChe
 from app.models.tender_model import Tender
 from app.models.user_model import User
 from app.models.whistleblower_model import WhistleblowerReport
+from app.models.entity_model import ProcuringEntity
+from app.models.bid_model import Bid
 
 __all__ = [
     "User",
@@ -63,4 +65,6 @@ __all__ = [
     "RefreshToken",
     "AuditAction",
     "TokenType",
+    "ProcuringEntity",
+    "Bid",
 ]

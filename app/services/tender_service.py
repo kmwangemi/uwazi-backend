@@ -11,6 +11,7 @@ from app.core.logger import get_logger
 from app.models.enums_model import RiskLevel, TenderStatus
 from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate, TenderUpdate
+from app.services.entity_service import get_or_create_entity
 
 logger = get_logger(__name__)
 
@@ -30,17 +31,23 @@ async def create_tender(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A tender with this reference number already exists.",
             )
-        # new_tender = Tender(
-        #     **tender_data.model_dump(),
-        #     created_by=created_by,
-        #     attachments=attachments or [],
-        # )
+        # ── Auto-create or fetch procuring entity ─────────────────────────────
+        entity = await get_or_create_entity(
+            db=db,
+            entity_name=tender_data.entity_name,
+            entity_type=tender_data.entity_type or "OTHER",
+            county=tender_data.county,
+        )
         new_tender = Tender(
             **tender_data.model_dump(exclude={"attachments"}),
             created_by=created_by,
             attachments=attachments or [],
+            procuring_entity_id=entity.id,  # link entity
         )
         db.add(new_tender)
+        # ── Update entity stats ───────────────────────────────────────────────
+        entity.total_tenders += 1
+        entity.total_expenditure += tender_data.amount
         await db.commit()
         await db.refresh(new_tender)
         return new_tender
@@ -53,6 +60,41 @@ async def create_tender(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create tender.",
         ) from e
+
+
+# async def create_tender(
+#     db: AsyncSession,
+#     tender_data: TenderCreate,
+#     created_by: uuid.UUID,
+#     attachments: list[dict] | None = None,
+# ) -> Tender:
+#     try:
+#         result = await db.execute(
+#             select(Tender).filter(Tender.tender_number == tender_data.tender_number)
+#         )
+#         if result.scalars().first():
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="A tender with this reference number already exists.",
+#             )
+#         new_tender = Tender(
+#             **tender_data.model_dump(exclude={"attachments"}),
+#             created_by=created_by,
+#             attachments=attachments or [],
+#         )
+#         db.add(new_tender)
+#         await db.commit()
+#         await db.refresh(new_tender)
+#         return new_tender
+#     except HTTPException:
+#         raise
+#     except SQLAlchemyError as e:
+#         await db.rollback()
+#         logger.error("Failed to create tender", extra={"error": str(e)})
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail="Failed to create tender.",
+#         ) from e
 
 
 async def list_tenders(

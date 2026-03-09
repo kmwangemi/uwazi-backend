@@ -24,6 +24,7 @@ from app.api.v1.routes.user_routes import user_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.middleware.logger_middleware import RequestLoggingMiddleware
+from app.api.v1.routes.entity_routes import entity_router
 
 
 @asynccontextmanager
@@ -68,6 +69,7 @@ app.include_router(user_router, prefix=PREFIX)
 app.include_router(tender_router, prefix=PREFIX)
 app.include_router(supplier_router, prefix=PREFIX)
 app.include_router(bid_router, prefix=PREFIX)
+app.include_router(entity_router, prefix=PREFIX)
 
 
 @app.get("/", tags=["Health"])
