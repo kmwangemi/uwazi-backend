@@ -41,6 +41,9 @@ class Tender(Base):
     entity_type: Mapped[Optional[str]] = mapped_column(  # frontend: entityType
         String(100), nullable=True
     )
+    procuring_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("procuring_entities.id"), nullable=True, index=True
+    )
     # ── Classification ────────────────────────────────────────────────────────
     category: Mapped[Optional[str]] = mapped_column(  # frontend: category
         String(100), nullable=True, index=True
@@ -126,6 +129,7 @@ class Tender(Base):
         "AnalysisResult", back_populates="tender", cascade="all, delete-orphan"
     )
     bids = relationship("Bid", back_populates="tender", cascade="all, delete-orphan")
+    procuring_entity = relationship("ProcuringEntity", back_populates="tenders")
 
     def __repr__(self) -> str:
         return f"<Tender(id={self.id}, tender_number={self.tender_number}, status={self.status})>"
