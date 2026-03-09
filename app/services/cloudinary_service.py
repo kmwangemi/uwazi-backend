@@ -1,6 +1,7 @@
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile
+
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -48,4 +49,35 @@ async def delete_tender_attachment(public_id: str) -> None:
             "Cloudinary delete failed",
             extra={"public_id": public_id, "error": str(exc)},
         )
+        raise
+
+
+async def upload_bid_document(
+    file: UploadFile,
+    bid_reference: str,
+    folder: str,  # "technical" | "financial" | "compliance"
+) -> dict:
+    """Upload a bid document to Cloudinary under bids/{reference}/{folder}/"""
+    try:
+        contents = await file.read()
+        result = cloudinary.uploader.upload(
+            contents,
+            folder=f"bids/{bid_reference}/{folder}",
+            resource_type="auto",
+            public_id=f"{bid_reference}_{folder}_{file.filename}",
+            overwrite=True,
+        )
+        return {
+            "url": result["secure_url"],
+            "public_id": result["public_id"],
+            "file_name": file.filename,
+            "file_type": file.content_type,
+            "size": result.get("bytes"),
+        }
+    except Exception as exc:
+        logger.error(
+            "Bid document upload failed",
+            extra={"file": file.filename, "error": str(exc)},
+        )
+        raise
         raise

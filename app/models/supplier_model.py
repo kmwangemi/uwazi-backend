@@ -117,6 +117,7 @@ class Supplier(Base):
         back_populates="supplier",
         cascade="all, delete-orphan",
     )
+    bids = relationship("Bid", back_populates="supplier", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Supplier(id={self.id}, registration_number={self.registration_number}, name={self.name})>"
