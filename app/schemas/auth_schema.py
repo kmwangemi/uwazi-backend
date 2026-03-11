@@ -1,10 +1,9 @@
 """
-Procurement System — Auth Schemas
+SHA Fraud Detection — Auth Schemas
 
 Covers: login, token responses, password change, token refresh.
 """
 
-import uuid
 from typing import List
 
 from pydantic import EmailStr, Field, field_validator
@@ -68,12 +67,12 @@ class AuthUserResponse(BaseSchema):
     Shows only what the frontend needs immediately after login.
     """
 
-    id: uuid.UUID
     email: str
     full_name: str
-    roles: List[str] = []
+    is_active: bool
     is_superuser: bool
     must_change_password: bool
+    roles: List[str] = []
 
 
 class LoginResponse(BaseSchema):

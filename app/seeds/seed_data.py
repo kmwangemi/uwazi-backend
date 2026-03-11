@@ -44,6 +44,11 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
     "view_analytics": ("analytics", "Access dashboard KPIs and provider analytics"),
     # Audit
     "view_audit_logs": ("audit", "View the immutable system audit trail"),
+    # Bids
+    "submit_bid": ("bids", "Submit a bid on an open tender"),
+    "view_bids": ("bids", "View bids submitted on a tender"),
+    "update_bid": ("bids", "Edit or withdraw a submitted bid before the deadline"),
+    "view_own_bids": ("bids", "View own submitted bids and their evaluation status"),
 }
 
 
@@ -51,14 +56,19 @@ PERMISSIONS: dict[str, tuple[str, str]] = {
 # Format: { "name": ("display_name", "description", is_system_role) }
 
 ROLES: dict[str, tuple[str, str, bool]] = {
-    "fraud_analyst": (
-        "Fraud Analyst",
-        "Reviews flagged tenders, creates and works on investigation cases",
+    "investigator": (
+        "Investigator",
+        "Reviews flagged tenders, creates and works on investigation cases, and resolves alerts",
         True,
     ),
-    "senior_analyst": (
-        "Senior Analyst",
-        "All analyst capabilities plus case approval, assignment, and alert resolution",
+    "supplier": (
+        "Supplier",
+        "Submits bids, views own tender status and procurement notices",
+        True,
+    ),
+    "procurement_officer": (
+        "Procurement Officer",
+        "Creates and manages tenders, reviews submissions, and oversees the procurement lifecycle",
         True,
     ),
     "admin": (
@@ -82,22 +92,31 @@ ROLES: dict[str, tuple[str, str, bool]] = {
 # ── Role → Permission Mapping ─────────────────────────────────────────────────
 
 ROLE_PERMISSION_MAP: dict[str, list[str]] = {
-    "fraud_analyst": [
+    "investigator": [
         "view_tender",
         "view_score",
         "view_features",
-        "create_case",
-        "update_case",
-        "view_analytics",
-    ],
-    "senior_analyst": [
-        "view_tender",
-        "view_score",
-        "view_features",
+        "view_bids",
         "create_case",
         "assign_case",
         "update_case",
         "update_tender",
+        "view_analytics",
+        "view_audit_logs",
+    ],
+    "supplier": [
+        "view_tender",
+        "submit_bid",
+        "update_bid",
+        "view_own_bids",
+    ],
+    "procurement_officer": [
+        "create_tender",
+        "view_tender",
+        "update_tender",
+        "score_tender",
+        "view_score",
+        "view_bids",
         "view_analytics",
         "view_audit_logs",
     ],
@@ -125,11 +144,42 @@ ROLE_PERMISSION_MAP: dict[str, list[str]] = {
 
 
 # ── Default Superuser ──────────────────────────────────────────────────────────
-# Only created if no superuser exists. Change password immediately after first login.
+# Only created if no superuser exists.
+# Values are loaded from environment variables — never hardcode credentials here.
+# Required variables in your .env file:
+#   SUPERUSER_EMAIL
+#   SUPERUSER_FULL_NAME
+#   SUPERUSER_PASSWORD
+
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+_email = os.getenv("SUPERUSER_EMAIL")
+_name = os.getenv("SUPERUSER_FULL_NAME")
+_password = os.getenv("SUPERUSER_PASSWORD")
+
+_missing = [
+    k
+    for k, v in {
+        "SUPERUSER_EMAIL": _email,
+        "SUPERUSER_FULL_NAME": _name,
+        "SUPERUSER_PASSWORD": _password,
+    }.items()
+    if not v
+]
+
+if _missing:
+    raise EnvironmentError(
+        f"Missing required environment variable(s): {', '.join(_missing)}\n"
+        "Add them to your .env file before running the seeder."
+    )
 
 DEFAULT_SUPERUSER = {
-    "email": "demo@procmon.go.ke",
-    "full_name": "System Administrator",
-    "password": "Admin@123!",  # ← CHANGE THIS on first login
+    "email": _email,
+    "full_name": _name,
+    "password": _password,
     "is_superuser": True,
 }

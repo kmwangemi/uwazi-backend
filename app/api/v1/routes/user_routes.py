@@ -1,23 +1,39 @@
 """
-SHA Fraud Detection — User Routes
+Procurement Monitoring System — User & RBAC Routes
 
-GET    /api/v1/users
-POST   /api/v1/users
-GET    /api/v1/users/{id}
-PATCH  /api/v1/users/{id}
-PATCH  /api/v1/users/{id}/roles
-PATCH  /api/v1/users/{id}/deactivate
-GET    /api/v1/roles
-GET    /api/v1/permissions
+Profile  (own account, any authenticated user):
+  GET    /api/v1/users/me              Get own profile
+  PATCH  /api/v1/users/me              Update own name / phone / department
+
+User management  (admin, requires manage_users permission):
+  GET    /api/v1/users                 List all users (paginated)
+  POST   /api/v1/users                 Create a new user
+  GET    /api/v1/users/{id}            Get user by ID
+  PATCH  /api/v1/users/{id}            Update user fields
+  PATCH  /api/v1/users/{id}/roles      Assign roles
+  PATCH  /api/v1/users/{id}/deactivate Deactivate account
+
+RBAC reference data:
+  GET    /api/v1/roles                 List all roles
+  GET    /api/v1/permissions           List all permissions
+
+NOTE: /me routes are registered BEFORE /{id} so FastAPI does not
+      interpret the literal string "me" as a UUID parameter.
 """
 
 import uuid
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import PaginationParams, get_db, require_permission
+from app.core.dependencies import (
+    PaginationParams,
+    get_current_user,
+    get_db,
+    require_permission,
+)
+from app.models.user_model import User
 from app.schemas.base_schema import PaginatedResponse
 from app.schemas.user_schema import (
     AssignRolesRequest,
@@ -25,22 +41,81 @@ from app.schemas.user_schema import (
     RoleResponse,
     UserCreate,
     UserListResponse,
+    UserProfileUpdate,
     UserResponse,
-    UserUpdate,
 )
 from app.services.user_service import UserService
 
-user_router = APIRouter(prefix="/users", tags=["Users & RBAC"])
+user_router = APIRouter(tags=["Users & RBAC"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /profile  — own profile  (no special permission, any authenticated user)
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @user_router.get(
-    "", response_model=PaginatedResponse[UserListResponse], summary="List all users"
+    "/users/profile",
+    response_model=UserResponse,
+    summary="Get my profile",
+    description="""
+Returns the full profile of the currently authenticated user.
+
+**Returned fields:**
+- `id`, `email`, `full_name`, `phone`, `department`
+- `is_active`, `is_superuser`, `must_change_password`
+- `last_login_at`, `created_at`, `updated_at`
+- `roles[]` with nested `permissions[]`
+
+No special permission required — every authenticated user can call this.
+Use the JWT bearer token in the Authorization header.
+""",
+)
+async def get_my_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await UserService.get_profile(db, current_user)
+
+
+@user_router.patch(
+    "/users/profile",
+    response_model=UserResponse,
+    summary="Update my profile",
+    description="""
+Update the authenticated user's own profile.
+
+**Editable fields** (all optional — send only what you want to change):
+- `full_name`
+- `phone`
+- `department`  — e.g. "Fraud Investigation", "Data Science", "Compliance"
+
+Email, password, roles, and activation status require separate admin endpoints.
+""",
+)
+async def update_my_profile(
+    data: UserProfileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await UserService.update_profile(db, current_user, data)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# User management  (requires manage_users permission)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@user_router.get(
+    "/users",
+    response_model=PaginatedResponse[UserListResponse],
+    summary="List all users",
 )
 async def list_users(
-    is_active: Optional[bool] = Query(None),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     items, total = await UserService.list_users(
         db,
@@ -53,91 +128,107 @@ async def list_users(
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
-        pages=-(-total // pagination.page_size),
+        pages=-(-total // pagination.page_size) if total else 0,
     )
 
 
 @user_router.post(
-    "", response_model=UserResponse, status_code=201, summary="Create a new user"
+    "/users",
+    response_model=UserResponse,
+    status_code=201,
+    summary="Create a new user",
 )
 async def create_user(
     data: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.create_user(db, data, created_by=current_user)
 
 
-@user_router.get("/{user_id}", response_model=UserResponse, summary="Get user by ID")
+@user_router.get(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Get user by ID",
+)
 async def get_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.get_user(db, user_id)
 
 
 @user_router.patch(
-    "/{user_id}", response_model=UserResponse, summary="Update user profile"
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Update user (admin)",
+    description="Admin update of any user field — `full_name`, `phone`, `department`, `is_active`.",
 )
 async def update_user(
     user_id: uuid.UUID,
-    data: UserUpdate,
+    data: UserProfileUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.update_user(db, user_id, data, updated_by=current_user)
 
 
 @user_router.patch(
-    "/{user_id}/roles", response_model=UserResponse, summary="Assign roles to user"
+    "/users/{user_id}/roles",
+    response_model=UserResponse,
+    summary="Assign roles to user",
+    description="Replaces the user's entire role set with the provided list.",
 )
 async def assign_roles(
     user_id: uuid.UUID,
     data: AssignRolesRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.assign_roles(db, user_id, data, assigned_by=current_user)
 
 
 @user_router.patch(
-    "/{user_id}/deactivate", response_model=UserResponse, summary="Deactivate a user"
+    "/users/{user_id}/deactivate",
+    response_model=UserResponse,
+    summary="Deactivate a user account",
+    description="Soft-delete — sets `is_active = false`. Cannot deactivate your own account.",
 )
 async def deactivate_user(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.deactivate_user(db, user_id, deactivated_by=current_user)
 
 
-# ── Roles & Permissions ───────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# RBAC reference data
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 @user_router.get(
-    "/roles/all",
-    response_model=list[RoleResponse],
-    tags=["Users & RBAC"],
+    "/roles",
+    response_model=List[RoleResponse],
     summary="List all roles",
 )
 async def list_roles(
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     roles = await UserService.list_roles(db)
     return [RoleResponse.model_validate(r) for r in roles]
 
 
 @user_router.get(
-    "/permissions/all",
-    response_model=list[PermissionResponse],
-    tags=["Users & RBAC"],
+    "/permissions",
+    response_model=List[PermissionResponse],
     summary="List all permissions",
 )
 async def list_permissions(
     db: AsyncSession = Depends(get_db),
-    current_user: UserResponse = Depends(require_permission("manage_users")),
+    current_user: User = Depends(require_permission("manage_users")),
 ):
     perms = await UserService.list_permissions(db)
     return [PermissionResponse.model_validate(p) for p in perms]

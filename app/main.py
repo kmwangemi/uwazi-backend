@@ -18,13 +18,13 @@ logger = get_logger(__name__)
 
 from app.api.v1.routes.auth_routes import auth_router
 from app.api.v1.routes.bid_routes import bid_router
+from app.api.v1.routes.entity_routes import entity_router
 from app.api.v1.routes.supplier_routes import supplier_router
 from app.api.v1.routes.tender_routes import tender_router
 from app.api.v1.routes.user_routes import user_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.middleware.logger_middleware import RequestLoggingMiddleware
-from app.api.v1.routes.entity_routes import entity_router
 
 
 @asynccontextmanager
