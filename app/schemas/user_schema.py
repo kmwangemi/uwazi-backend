@@ -1,5 +1,5 @@
 """
-SHA Fraud Detection — User & RBAC Schemas
+Procurement Monitoring System — User & RBAC Schemas
 
 Covers: user CRUD, role management, permission listing.
 """
@@ -51,14 +51,24 @@ class UserCreate(BaseSchema):
     password: str = Field(min_length=8)
     role_ids: List[uuid.UUID] = []
     is_superuser: bool = False
+    department: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="e.g. 'Fraud Investigation', 'Data Science', 'Compliance'",
+    )
 
 
-class UserUpdate(BaseSchema):
-    """Partial update — all fields optional."""
+class UserProfileUpdate(BaseSchema):
+    """
+    Self-update — authenticated user edits their own profile.
+    Scoped to non-sensitive fields only; password/email/roles require
+    separate admin endpoints.
+    """
 
     full_name: Optional[str] = Field(None, min_length=2, max_length=255)
     phone: Optional[str] = None
     is_active: Optional[bool] = None
+    department: Optional[str] = Field(None, max_length=100)
 
 
 class AssignRolesRequest(BaseSchema):
@@ -75,6 +85,7 @@ class UserResponse(UUIDSchema, TimestampMixin):
     is_superuser: bool
     last_login_at: Optional[datetime] = None
     must_change_password: bool
+    department: Optional[str] = None
     roles: List[RoleResponse] = []
 
 
@@ -86,5 +97,6 @@ class UserListResponse(BaseSchema):
     full_name: str
     is_active: bool
     is_superuser: bool
+    department: Optional[str] = None
     last_login_at: Optional[datetime] = None
     roles: List[str] = []  # just role names for performance
