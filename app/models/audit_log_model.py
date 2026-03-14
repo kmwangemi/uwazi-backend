@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums_model import AuditAction
+from app.enums import AuditAction
 
 if TYPE_CHECKING:
     from app.models.user_model import User

@@ -16,12 +16,23 @@ from app.core.logger import get_logger, setup_logging
 setup_logging()
 logger = get_logger(__name__)
 
+# from app.api.v1.routes.auth_routes import auth_router
+# from app.api.v1.routes.bid_routes import bid_router
+# from app.api.v1.routes.entity_routes import entity_router
+# from app.api.v1.routes.supplier_routes import supplier_router
+# from app.api.v1.routes.tender_routes import tender_router
+# from app.api.v1.routes.user_routes import user_router
+
+from app.api.v1.routes.analyze_routes import router as analyze_router
 from app.api.v1.routes.auth_routes import auth_router
-from app.api.v1.routes.bid_routes import bid_router
-from app.api.v1.routes.entity_routes import entity_router
-from app.api.v1.routes.supplier_routes import supplier_router
-from app.api.v1.routes.tender_routes import tender_router
-from app.api.v1.routes.user_routes import user_router
+from app.api.v1.routes.benchmark_routes import router as benchmarks_router
+from app.api.v1.routes.dashboard_routes import router as dashboard_router
+from app.api.v1.routes.ml_routes import collusion_router
+from app.api.v1.routes.ml_routes import router as ml_router
+# from app.api.v1.routes.scraper import router as scraper_router
+from app.api.v1.routes.supplier_routes import router as suppliers_router
+from app.api.v1.routes.tender_routes import router as tenders_router
+from app.api.v1.routes.whistleblower_routes import router as whistleblower_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.middleware.logger_middleware import RequestLoggingMiddleware
@@ -43,8 +54,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(
-        "Production-grade procurement platform for Kenya. "
-        "Hybrid rule + ML scoring engine with full explainability, case management, and audit trails."
+        "Real-time detection and prevention of fraudulent practices "
+        "in Kenya's public procurement. Powered by AI + ML."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
@@ -64,12 +75,33 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
 
-app.include_router(auth_router, prefix=PREFIX)
-app.include_router(user_router, prefix=PREFIX)
-app.include_router(tender_router, prefix=PREFIX)
-app.include_router(supplier_router, prefix=PREFIX)
-app.include_router(bid_router, prefix=PREFIX)
-app.include_router(entity_router, prefix=PREFIX)
+# app.include_router(auth_router, prefix=PREFIX)
+# app.include_router(user_router, prefix=PREFIX)
+# app.include_router(tender_router, prefix=PREFIX)
+# app.include_router(supplier_router, prefix=PREFIX)
+# app.include_router(bid_router, prefix=PREFIX)
+# app.include_router(entity_router, prefix=PREFIX)
+
+app.include_router(
+    auth_router
+)  # POST /api/auth/login|register|logout  GET /api/auth/me
+app.include_router(tenders_router)  # GET|POST /api/tenders  + /{id} sub-routes
+app.include_router(suppliers_router)  # GET /api/suppliers + /{id}
+app.include_router(
+    dashboard_router
+)  # GET /api/dashboard/stats|heatmap|top-risk-suppliers|risk-trend  POST /ai-query
+app.include_router(
+    whistleblower_router
+)  # POST /api/whistleblower/submit  GET|PATCH /reports
+app.include_router(benchmarks_router)  # GET|POST /api/benchmarks
+app.include_router(
+    analyze_router
+)  # POST /api/analyze/price-check|specifications  GET /county-risk
+# app.include_router(scraper_router)  # POST /api/scraper/run
+app.include_router(
+    ml_router
+)  # GET /api/ml/status  POST /api/ml/train/*  GET /spending-forecast
+app.include_router(collusion_router)  # GET /api/tenders/{id}/collusion-analysis
 
 
 @app.get("/", tags=["Health"])

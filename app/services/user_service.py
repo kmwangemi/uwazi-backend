@@ -4,10 +4,11 @@ Procurement Monitoring System — User Service
 Handles: user CRUD, role assignment, permission management, profile.
 
 Changes vs the version in the document:
-  1. create_user   — passes department= to User(...)
-  2. list_users    — uses func.count() (no .all()+len()), includes department
-  3. get_profile() — new: returns the current user's own full profile
-  4. update_profile() — new: self-update of name / phone / department
+  1. create_user       — passes department= to User(...)
+  2. list_users        — uses func.count() (no .all()+len()), includes department
+  3. get_profile()     — new: returns the current user's own full profile
+  4. update_profile()  — new: self-update of name / phone / department
+  5. register_supplier()— new: public self-registration, role defaults to supplier
 """
 
 import uuid
@@ -30,6 +31,7 @@ from app.schemas.user_schema import (
     UserListResponse,
     UserProfileUpdate,
     UserResponse,
+    SupplierRegisterRequest,
 )
 from app.services.audit_service import AuditService
 
@@ -73,7 +75,7 @@ class UserService:
             phone=data.phone,
             hashed_password=hash_password(data.password),
             is_superuser=data.is_superuser,
-            department=data.department,  # ← was missing
+            department=data.department,
             must_change_password=True,
         )
         user.roles = roles
@@ -87,6 +89,69 @@ class UserService:
             entity_type="User",
             entity_id=user.id,
             metadata={"email": user.email, "roles": [r.name for r in roles]},
+        )
+        result = await db.execute(_load_user().filter(User.id == user.id))
+        return UserResponse.model_validate(result.scalars().first())
+
+    # ── Supplier self-registration ─────────────────────────────────────────────
+
+    @staticmethod
+    async def register_supplier(
+        db: AsyncSession,
+        data: SupplierRegisterRequest,
+    ) -> UserResponse:
+        """
+        Public self-registration endpoint for suppliers.
+
+        - No authentication required — called before login.
+        - Role is always forced to 'supplier', regardless of request payload.
+        - must_change_password is False — supplier sets their own password on signup.
+        - Audit log records system as the actor (no current_user).
+        """
+        # ── Duplicate email check ────────────────────────────────────────────
+        existing = await db.execute(
+            select(User).filter(User.email == data.email.lower())
+        )
+        if existing.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"An account with email '{data.email}' already exists",
+            )
+        # ── Resolve the supplier role ────────────────────────────────────────
+        role_result = await db.execute(
+            select(Role).filter(Role.name == "supplier")
+        )
+        supplier_role = role_result.scalars().first()
+        if not supplier_role:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Supplier role is not configured. Contact the administrator.",
+            )
+        # ── Create user ──────────────────────────────────────────────────────
+        user = User(
+            email=data.email.lower(),
+            full_name=data.full_name,
+            phone=data.phone,
+            hashed_password=hash_password(data.password),
+            is_superuser=False,
+            must_change_password=False,
+        )
+        user.roles = [supplier_role]
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        # ── Audit log (system-initiated, no actor user_id) ───────────────────
+        await AuditService.log(
+            db,
+            AuditAction.USER_CREATED,
+            user_id=None,
+            entity_type="User",
+            entity_id=user.id,
+            metadata={
+                "email": user.email,
+                "roles": ["supplier"],
+                "registration_type": "self_registration",
+            },
         )
         result = await db.execute(_load_user().filter(User.id == user.id))
         return UserResponse.model_validate(result.scalars().first())
@@ -127,7 +192,6 @@ class UserService:
         q = select(User).options(selectinload(User.roles))
         if is_active is not None:
             q = q.filter(User.is_active == is_active)
-        # COUNT using SQL aggregate — never fetches rows just to call len()
         count_result = await db.execute(select(count()).select_from(q.subquery()))
         total = count_result.scalar_one()
         result = await db.execute(
@@ -141,7 +205,7 @@ class UserService:
                 full_name=u.full_name,
                 is_active=u.is_active,
                 is_superuser=u.is_superuser,
-                department=u.department,  # ← was missing
+                department=u.department,
                 last_login_at=u.last_login_at,
                 roles=[r.name for r in u.roles],
             )
