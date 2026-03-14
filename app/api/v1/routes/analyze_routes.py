@@ -16,7 +16,7 @@ from app.enums import RiskLevel
 from app.models.risk_score_model import RiskScore
 from app.models.tender_model import Tender
 
-router = APIRouter(prefix="/api/analyze", tags=["Risk Analysis"])
+router = APIRouter(prefix="/analyze", tags=["Risk Analysis"])
 
 
 # ── POST /api/analyze/price-check ────────────────────────────────────────────

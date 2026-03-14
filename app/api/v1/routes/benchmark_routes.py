@@ -9,7 +9,7 @@ from app.core.dependencies import require_role
 from app.models.price_benchmark_model import PriceBenchmark
 from app.schemas.benchmark_schema import PriceBenchmarkCreate
 
-router = APIRouter(prefix="/api/benchmarks", tags=["Price Benchmarks"])
+router = APIRouter(prefix="/benchmarks", tags=["Price Benchmarks"])
 
 
 @router.get("", response_model=dict)

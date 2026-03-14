@@ -16,7 +16,7 @@ from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate
 from app.services.risk_engine_service import compute_and_save_risk
 
-router = APIRouter(prefix="/api/tenders", tags=["Tenders"])
+router = APIRouter(prefix="/tenders", tags=["Tenders"])
 
 
 @router.get("", response_model=dict)

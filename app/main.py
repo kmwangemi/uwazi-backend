@@ -29,6 +29,7 @@ from app.api.v1.routes.benchmark_routes import router as benchmarks_router
 from app.api.v1.routes.dashboard_routes import router as dashboard_router
 from app.api.v1.routes.ml_routes import collusion_router
 from app.api.v1.routes.ml_routes import router as ml_router
+
 # from app.api.v1.routes.scraper import router as scraper_router
 from app.api.v1.routes.supplier_routes import router as suppliers_router
 from app.api.v1.routes.tender_routes import router as tenders_router
@@ -75,33 +76,30 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
 
-# app.include_router(auth_router, prefix=PREFIX)
-# app.include_router(user_router, prefix=PREFIX)
-# app.include_router(tender_router, prefix=PREFIX)
-# app.include_router(supplier_router, prefix=PREFIX)
-# app.include_router(bid_router, prefix=PREFIX)
-# app.include_router(entity_router, prefix=PREFIX)
-
 app.include_router(
-    auth_router
+    auth_router, prefix=PREFIX
 )  # POST /api/auth/login|register|logout  GET /api/auth/me
-app.include_router(tenders_router)  # GET|POST /api/tenders  + /{id} sub-routes
-app.include_router(suppliers_router)  # GET /api/suppliers + /{id}
 app.include_router(
-    dashboard_router
+    tenders_router, prefix=PREFIX
+)  # GET|POST /api/tenders  + /{id} sub-routes
+app.include_router(suppliers_router, prefix=PREFIX)  # GET /api/suppliers + /{id}
+app.include_router(
+    dashboard_router, prefix=PREFIX
 )  # GET /api/dashboard/stats|heatmap|top-risk-suppliers|risk-trend  POST /ai-query
 app.include_router(
-    whistleblower_router
+    whistleblower_router, prefix=PREFIX
 )  # POST /api/whistleblower/submit  GET|PATCH /reports
-app.include_router(benchmarks_router)  # GET|POST /api/benchmarks
+app.include_router(benchmarks_router, prefix=PREFIX)  # GET|POST /api/benchmarks
 app.include_router(
-    analyze_router
+    analyze_router, prefix=PREFIX
 )  # POST /api/analyze/price-check|specifications  GET /county-risk
 # app.include_router(scraper_router)  # POST /api/scraper/run
 app.include_router(
-    ml_router
+    ml_router, prefix=PREFIX
 )  # GET /api/ml/status  POST /api/ml/train/*  GET /spending-forecast
-app.include_router(collusion_router)  # GET /api/tenders/{id}/collusion-analysis
+app.include_router(
+    collusion_router, prefix=PREFIX
+)  # GET /api/tenders/{id}/collusion-analysis
 
 
 @app.get("/", tags=["Health"])
@@ -116,4 +114,5 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
+    return {"status": "ok"}
     return {"status": "ok"}
