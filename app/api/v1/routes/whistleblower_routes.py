@@ -10,7 +10,7 @@ from app.core.dependencies import require_role
 from app.models import Tender, WhistleblowerReport
 from app.schemas.whistleblower_schema import WhistleblowerCreate
 
-router = APIRouter(prefix="/api/whistleblower", tags=["Whistleblower"])
+router = APIRouter(prefix="/whistleblower", tags=["Whistleblower"])
 
 
 @router.post("/submit", response_model=dict, status_code=201)

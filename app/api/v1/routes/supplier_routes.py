@@ -12,7 +12,7 @@ from app.schemas.supplier_schema import SupplierCreate
 from app.core.dependencies import require_role
 from app.services.supplier_checker_service import compute_supplier_score
 
-router = APIRouter(prefix="/api/suppliers", tags=["Suppliers"])
+router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
 def _ghost_prob(supplier: Supplier) -> float:

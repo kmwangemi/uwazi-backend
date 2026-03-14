@@ -9,7 +9,7 @@ from app.models.risk_score_model import RiskScore
 from app.models.supplier_model import Supplier
 from app.models.tender_model import Tender
 
-router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("/stats")

@@ -18,7 +18,7 @@ from app.models.contract_model import Contract
 from app.models.procuring_entity_model import ProcuringEntity
 from app.core.dependencies import require_role
 
-router = APIRouter(prefix="/api/ml", tags=["ML Models"])
+router = APIRouter(prefix="/ml", tags=["ML Models"])
 
 
 @router.get("/status")
@@ -227,7 +227,7 @@ def get_spending_forecast(
 
 # ── Collusion analysis for a specific tender ──────────────────────────────────
 
-collusion_router = APIRouter(prefix="/api/tenders", tags=["Collusion Detection"])
+collusion_router = APIRouter(prefix="/tenders", tags=["Collusion Detection"])
 
 
 @collusion_router.get("/{tender_id}/collusion-analysis")
