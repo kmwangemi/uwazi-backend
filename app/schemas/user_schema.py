@@ -57,6 +57,12 @@ class UserCreate(BaseSchema):
         description="e.g. 'Fraud Investigation', 'Data Science', 'Compliance'",
     )
 
+class SupplierRegisterRequest(BaseSchema):
+    email: str
+    full_name: str
+    phone: str | None = None
+    password: str
+
 
 class UserProfileUpdate(BaseSchema):
     """

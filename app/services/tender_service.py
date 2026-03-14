@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.logger import get_logger
-from app.models.enums_model import RiskLevel, TenderStatus
+from app.enums import RiskLevel, TenderStatus
 from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate, TenderUpdate
 from app.services.entity_service import get_or_create_entity
@@ -24,7 +24,9 @@ async def create_tender(
 ) -> Tender:
     try:
         result = await db.execute(
-            select(Tender).filter(Tender.tender_number == tender_data.tender_number)
+            select(Tender).filter(
+                Tender.reference_number == tender_data.reference_number
+            )
         )
         if result.scalars().first():
             raise HTTPException(
@@ -71,7 +73,7 @@ async def create_tender(
 # ) -> Tender:
 #     try:
 #         result = await db.execute(
-#             select(Tender).filter(Tender.tender_number == tender_data.tender_number)
+#             select(Tender).filter(Tender.reference_number == tender_data.reference_number)
 #         )
 #         if result.scalars().first():
 #             raise HTTPException(
@@ -114,21 +116,16 @@ async def list_tenders(
         term = f"%{search.strip()}%"
         query = query.filter(
             or_(
-                Tender.tender_number.ilike(term),
+                Tender.reference_number.ilike(term),
                 Tender.title.ilike(term),
-                Tender.entity_name.ilike(term),
             )
         )
     if status is not None:
         query = query.filter(Tender.status == status)
-    if risk_level is not None:
-        query = query.filter(Tender.risk_level == risk_level)
     if county is not None:
         query = query.filter(Tender.county.ilike(f"%{county}%"))
     if category is not None:
         query = query.filter(Tender.category.ilike(f"%{category}%"))
-    if is_flagged is not None:
-        query = query.filter(Tender.is_flagged == is_flagged)
     query = query.order_by(Tender.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()

@@ -43,6 +43,7 @@ from app.schemas.user_schema import (
     UserListResponse,
     UserProfileUpdate,
     UserResponse,
+    SupplierRegisterRequest,
 )
 from app.services.user_service import UserService
 
@@ -144,6 +145,14 @@ async def create_user(
     current_user: User = Depends(require_permission("manage_users")),
 ):
     return await UserService.create_user(db, data, created_by=current_user)
+
+
+@user_router.post("/register", response_model=UserResponse, status_code=201)
+async def register_supplier(
+    data: SupplierRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await UserService.register_supplier(db, data)
 
 
 @user_router.get(

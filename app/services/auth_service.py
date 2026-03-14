@@ -23,7 +23,7 @@ from app.core.security import (
     hash_token,
     verify_password,
 )
-from app.models.enums_model import AuditAction, TokenType
+from app.enums import AuditAction, TokenType
 from app.models.refresh_token_model import RefreshToken
 from app.models.user_model import User
 from app.schemas.auth_schema import (

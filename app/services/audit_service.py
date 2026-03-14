@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log_model import AuditLog
-from app.models.enums_model import AuditAction
+from app.enums import AuditAction
 
 
 class AuditService:
