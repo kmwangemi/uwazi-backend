@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -396,7 +396,7 @@ async def get_investigation_package(
         "tender_title": tender.title,
         "reference_number": tender.reference_number,
         "package_markdown": package_md,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 

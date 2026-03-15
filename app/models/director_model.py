@@ -12,7 +12,7 @@ Normalised into its own table (not a JSON column) so we can:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, Index, String
@@ -82,7 +82,7 @@ class Director(Base):
         comment="Free-text description of political exposure if is_politically_exposed=True.",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

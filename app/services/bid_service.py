@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 def _generate_bid_reference() -> str:
-    ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return f"BID-{ts}-{str(uuid.uuid4())[:6].upper()}"
 
 

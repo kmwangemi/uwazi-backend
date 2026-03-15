@@ -7,7 +7,7 @@ Bid model — a supplier's submission for a specific tender.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
@@ -109,7 +109,7 @@ class Bid(Base):
     financial_score: Mapped[Optional[float]] = mapped_column(Float)
     evaluation_notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

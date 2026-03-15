@@ -5,7 +5,7 @@ Handles: login, token refresh, logout, password change.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timezone, datetime, timedelta
 from typing import Optional
 
 import jwt
@@ -58,7 +58,7 @@ class AuthService:
         )
         user = result.scalars().first()
         # ── Account lockout check ──────────────────────────────────────────
-        if user and user.locked_until and user.locked_until > datetime.now(UTC):
+        if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Account locked until {user.locked_until.isoformat()}. Contact admin.",
@@ -68,7 +68,9 @@ class AuthService:
             if user:
                 user.failed_login_count += 1
                 if user.failed_login_count >= 5:
-                    user.locked_until = datetime.now(UTC) + timedelta(minutes=30)
+                    user.locked_until = datetime.now(timezone.utc) + timedelta(
+                        minutes=30
+                    )
                 await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,14 +85,16 @@ class AuthService:
         # ── Reset failed counter on success ────────────────────────────────
         user.failed_login_count = 0
         user.locked_until = None
-        user.last_login_at = datetime.now(UTC)
+        user.last_login_at = datetime.now(timezone.utc)
         await db.commit()
         # ── Generate tokens ────────────────────────────────────────────────
         payload = {"sub": str(user.id)}
         access_token = create_access_token(payload)
         raw_refresh = create_refresh_token(payload)
         # Store hashed refresh token
-        expires = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
         db_token = RefreshToken(
             user_id=user.id,
             token_hash=hash_token(raw_refresh),
@@ -148,7 +152,7 @@ class AuthService:
             select(RefreshToken).filter(
                 RefreshToken.token_hash == token_hash,
                 RefreshToken.is_revoked == False,
-                RefreshToken.expires_at > datetime.now(UTC),
+                RefreshToken.expires_at > datetime.now(timezone.utc),
             )
         )
         db_token = result.scalars().first()
@@ -201,7 +205,7 @@ class AuthService:
                 detail="Current password is incorrect",
             )
         user.hashed_password = hash_password(new_password)
-        user.password_changed_at = datetime.now(UTC)
+        user.password_changed_at = datetime.now(timezone.utc)
         user.must_change_password = False
         await db.commit()
         await AuditService.log(

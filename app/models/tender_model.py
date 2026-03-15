@@ -7,7 +7,7 @@ Tender model — the core procurement entity in the system.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, Index, String, Text
@@ -123,12 +123,12 @@ class Tender(Base):
     )
     scraped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     # ── Foreign keys ───────────────────────────────────────────────────────────
     entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -183,6 +183,7 @@ class Tender(Base):
         back_populates="tender",
         lazy="select",
     )
+    alerts = relationship("Alert", back_populates="tender", lazy="selectin")
 
     # ── Composite indexes ──────────────────────────────────────────────────────
     __table_args__ = (

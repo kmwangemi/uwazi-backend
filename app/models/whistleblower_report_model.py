@@ -8,7 +8,7 @@ procurement corruption.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text
@@ -119,7 +119,7 @@ class WhistleblowerReport(Base):
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     reviewer_notes: Mapped[Optional[str]] = mapped_column(Text)
     submitted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────
