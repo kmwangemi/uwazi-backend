@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime
@@ -59,12 +59,12 @@ class Alert(Base):
     investigation_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # Relationships

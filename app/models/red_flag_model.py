@@ -7,7 +7,7 @@ RedFlag model — an individual corruption indicator detected on a tender.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
@@ -90,7 +90,7 @@ class RedFlag(Base):
         comment="ML model that generated this flag e.g. 'isolation_forest', 'spacy_ner', 'xgboost'",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

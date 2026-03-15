@@ -8,7 +8,7 @@ state corporations, and constitutional commissions that issue tenders.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String
@@ -84,12 +84,12 @@ class ProcuringEntity(Base):
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

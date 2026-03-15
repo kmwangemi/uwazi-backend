@@ -289,33 +289,45 @@ class TokenType(str, enum.Enum):
 class AuditAction(str, enum.Enum):
     """Standardised action codes for the audit log."""
 
-    # Auth
+    # ── Auth ──────────────────────────────────────────────────────────────────
     LOGIN = "LOGIN"
     LOGOUT = "LOGOUT"
     TOKEN_REFRESHED = "TOKEN_REFRESHED"
     PASSWORD_CHANGED = "PASSWORD_CHANGED"
 
-    # User management
+    # ── User management ───────────────────────────────────────────────────────
     USER_CREATED = "USER_CREATED"
     USER_UPDATED = "USER_UPDATED"
     USER_DEACTIVATED = "USER_DEACTIVATED"
     ROLE_ASSIGNED = "ROLE_ASSIGNED"
     ROLE_REMOVED = "ROLE_REMOVED"
 
-    # Fraud
-    CLAIM_SCORED = "CLAIM_SCORED"
-    SCORE_OVERRIDDEN = "SCORE_OVERRIDDEN"
+    # ── Tenders ───────────────────────────────────────────────────────────────
+    TENDER_CREATED = "TENDER_CREATED"
+    TENDER_UPDATED = "TENDER_UPDATED"
+    TENDER_SCORED = "TENDER_SCORED"  # maps to: score_tender
+    SCORE_OVERRIDDEN = "SCORE_OVERRIDDEN"  # maps to: view_score (manual override)
 
-    # Cases
-    CASE_CREATED = "CASE_CREATED"
-    CASE_ASSIGNED = "CASE_ASSIGNED"
-    CASE_STATUS_UPDATED = "CASE_STATUS_UPDATED"
-    CASE_NOTE_ADDED = "CASE_NOTE_ADDED"
-    CASE_CLOSED = "CASE_CLOSED"
+    # ── Bids ──────────────────────────────────────────────────────────────────
+    BID_SUBMITTED = "BID_SUBMITTED"  # maps to: submit_bid
+    BID_UPDATED = "BID_UPDATED"  # maps to: update_bid
 
-    # Admin
-    RULE_CREATED = "RULE_CREATED"
-    RULE_UPDATED = "RULE_UPDATED"
-    RULE_TOGGLED = "RULE_TOGGLED"
-    MODEL_REGISTERED = "MODEL_REGISTERED"
-    MODEL_DEPLOYED = "MODEL_DEPLOYED"
+    # ── ML Features ───────────────────────────────────────────────────────────
+    FEATURES_RECOMPUTED = "FEATURES_RECOMPUTED"  # maps to: manage_features
+    FEATURES_OVERRIDDEN = "FEATURES_OVERRIDDEN"  # maps to: manage_features
+
+    # ── Cases ─────────────────────────────────────────────────────────────────
+    CASE_CREATED = "CASE_CREATED"  # maps to: create_case
+    CASE_ASSIGNED = "CASE_ASSIGNED"  # maps to: assign_case
+    CASE_STATUS_UPDATED = "CASE_STATUS_UPDATED"  # maps to: update_case
+    CASE_NOTE_ADDED = "CASE_NOTE_ADDED"  # maps to: update_case
+    CASE_CLOSED = "CASE_CLOSED"  # maps to: update_case
+
+    # ── Admin — Rules ─────────────────────────────────────────────────────────
+    RULE_CREATED = "RULE_CREATED"  # maps to: manage_rules
+    RULE_UPDATED = "RULE_UPDATED"  # maps to: manage_rules
+    RULE_TOGGLED = "RULE_TOGGLED"  # maps to: manage_rules
+
+    # ── Admin — Models ────────────────────────────────────────────────────────
+    MODEL_REGISTERED = "MODEL_REGISTERED"  # maps to: deploy_model
+    MODEL_DEPLOYED = "MODEL_DEPLOYED"  # maps to: deploy_model

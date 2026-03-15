@@ -82,9 +82,9 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
     # Active investigations proxy = critical tenders analyzed in last 30 days
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     active_investigations = (
         db.query(RiskScore)
         .filter(
@@ -242,11 +242,11 @@ def get_risk_trend(
         total: int
     }]
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     from sqlalchemy import Date, cast
 
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     rows = (
         db.query(
@@ -280,7 +280,9 @@ def get_risk_trend(
     # Fill gaps with zeros so the chart has a continuous series
     result = []
     for i in range(days):
-        d = (datetime.utcnow() - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        d = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime(
+            "%Y-%m-%d"
+        )
         if d in daily:
             result.append(daily[d])
         else:

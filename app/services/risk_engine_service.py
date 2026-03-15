@@ -12,7 +12,7 @@ PIPELINE (per tender)
   Step 7  DB save                                  → RiskScore + RedFlag rows
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -256,7 +256,7 @@ def compute_and_save_risk(
         existing.flags = unique_flags
         existing.ai_analysis = ai_analysis
         existing.recommended_action = recommended_action
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(timezone.utc)
         rso = existing
     else:
         rso = RiskScore(

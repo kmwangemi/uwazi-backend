@@ -8,7 +8,7 @@ Companion model Director is in director.py.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
@@ -125,12 +125,12 @@ class Supplier(Base):
     verification_notes: Mapped[Optional[str]] = mapped_column(Text)
     blacklist_reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

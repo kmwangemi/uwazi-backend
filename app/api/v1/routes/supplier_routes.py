@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -162,7 +162,9 @@ def create_supplier(
 ):
     company_age_days = None
     if payload.incorporation_date:
-        company_age_days = (datetime.utcnow() - payload.incorporation_date).days
+        company_age_days = (
+            datetime.now(timezone.utc) - payload.incorporation_date
+        ).days
 
     supplier = Supplier(**payload.model_dump(), company_age_days=company_age_days)
     risk_result = compute_supplier_score(supplier)

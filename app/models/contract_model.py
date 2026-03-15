@@ -7,7 +7,7 @@ Contract model — an awarded contract between a procuring entity and a supplier
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
@@ -109,12 +109,12 @@ class Contract(Base):
     )
     termination_reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────
