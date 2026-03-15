@@ -24,37 +24,71 @@ from app.services.auth_service import AuthService
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+# def _set_auth_cookies(
+#     response: Response, access_token: str, refresh_token: str, user_role: str
+# ):
+#     is_prod = settings.ENVIRONMENT == "production"
+
+#     base_cookie = dict(
+#         secure=is_prod,
+#         samesite="strict" if is_prod else "lax",
+#         httponly=True,
+#     )
+
+#     response.set_cookie(
+#         key="auth_token",
+#         value=access_token,
+#         **base_cookie,
+#         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+#         path="/",
+#     )
+#     response.set_cookie(
+#         key="refresh_token",
+#         value=refresh_token,
+#         **base_cookie,
+#         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+#         path="/api/v1/auth/refresh" if is_prod else "/",
+#     )
+#     response.set_cookie(
+#         key="user_role",
+#         value=user_role,
+#         secure=is_prod,
+#         samesite="strict" if is_prod else "lax",
+#         httponly=False,  # middleware + JS needs to read this
+#         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+#         path="/",
+#     )
+
+
 def _set_auth_cookies(
     response: Response, access_token: str, refresh_token: str, user_role: str
 ):
     is_prod = settings.ENVIRONMENT == "production"
 
     base_cookie = dict(
-        secure=is_prod,
-        samesite="strict" if is_prod else "lax",
+        secure=True,  # always True — required for samesite=none
+        samesite="none",  # required for cross-origin (Vercel → your API)
         httponly=True,
+        path="/",  # consistent path for all cookies
     )
-
     response.set_cookie(
         key="auth_token",
         value=access_token,
         **base_cookie,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         **base_cookie,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        path="/api/v1/auth/refresh" if is_prod else "/",
     )
     response.set_cookie(
         key="user_role",
         value=user_role,
-        secure=is_prod,
-        samesite="strict" if is_prod else "lax",
-        httponly=False,  # middleware + JS needs to read this
+        secure=True,
+        samesite="none",
+        httponly=False,  # JS needs to read this
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
