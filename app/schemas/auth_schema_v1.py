@@ -1,5 +1,5 @@
 """
-Procurement Monitoring System — Auth Schemas
+SHA Fraud Detection — Auth Schemas
 
 Covers: login, token responses, password change, token refresh.
 """

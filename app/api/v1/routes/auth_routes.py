@@ -7,152 +7,66 @@ POST /api/v1/auth/logout
 PATCH /api/v1/auth/password
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.dependencies import CurrentUser, get_db
 from app.schemas.auth_schema import (
-    AuthUserResponse,
+    AccessTokenResponse,
+    LoginResponse,
     LogoutResponse,
     PasswordChangeRequest,
+    RefreshTokenRequest,
 )
 from app.schemas.base_schema import MessageResponse
 from app.services.auth_service import AuthService
 
-auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-# def _set_auth_cookies(
-#     response: Response, access_token: str, refresh_token: str, user_role: str
-# ):
-#     is_prod = settings.ENVIRONMENT == "production"
-
-#     base_cookie = dict(
-#         secure=is_prod,
-#         samesite="strict" if is_prod else "lax",
-#         httponly=True,
-#     )
-
-#     response.set_cookie(
-#         key="auth_token",
-#         value=access_token,
-#         **base_cookie,
-#         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-#         path="/",
-#     )
-#     response.set_cookie(
-#         key="refresh_token",
-#         value=refresh_token,
-#         **base_cookie,
-#         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-#         path="/api/v1/auth/refresh" if is_prod else "/",
-#     )
-#     response.set_cookie(
-#         key="user_role",
-#         value=user_role,
-#         secure=is_prod,
-#         samesite="strict" if is_prod else "lax",
-#         httponly=False,  # middleware + JS needs to read this
-#         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-#         path="/",
-#     )
-
-
-def _set_auth_cookies(
-    response: Response, access_token: str, refresh_token: str, user_role: str
-):
-    is_prod = settings.ENVIRONMENT == "production"
-
-    base_cookie = dict(
-        secure=True,  # always True — required for samesite=none
-        samesite="none",  # required for cross-origin (Vercel → your API)
-        httponly=True,
-        path="/",  # consistent path for all cookies
-    )
-    response.set_cookie(
-        key="auth_token",
-        value=access_token,
-        **base_cookie,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        **base_cookie,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-    )
-    response.set_cookie(
-        key="user_role",
-        value=user_role,
-        secure=True,
-        samesite="none",
-        httponly=False,  # JS needs to read this
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-    )
-
-
-@auth_router.post("/login", response_model=AuthUserResponse, summary="Login")
+@router.post(
+    "/login", response_model=LoginResponse, summary="Login with email + password"
+)
 async def login(
-    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Authenticate with email (username field) + password.
+    Returns JWT access token + refresh token.
+    """
     ip = request.client.host if request and request.client else None
-    result = await AuthService.login(db, form_data.username, form_data.password, ip)
-    # ✅ Join array to comma-separated string for cookie, parse back on frontend
-    roles_str = ",".join(result.user.roles) if result.user.roles else "viewer"
-    _set_auth_cookies(
-        response,
-        result.tokens.access_token,
-        result.tokens.refresh_token,
-        roles_str,  # e.g. "admin,investigator"
+    return await AuthService.login(
+        db, form_data.username, form_data.password, ip_address=ip
     )
-    return result.user  # ✅ returns AuthUserResponse directly
 
 
-@auth_router.post("/refresh", response_model=None, summary="Refresh access token")
+@router.post(
+    "/refresh", response_model=AccessTokenResponse, summary="Refresh access token"
+)
 async def refresh_token(
-    response: Response,
-    request: Request,
+    body: RefreshTokenRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    raw_refresh = request.cookies.get("refresh_token")  # ← read from cookie
-    if not raw_refresh:
-        raise HTTPException(status_code=401, detail="Missing refresh token")
-    result = await AuthService.refresh(db, raw_refresh)
-    response.set_cookie(
-        key="auth_token",
-        value=result.access_token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-    )
-    return {"ok": True}
+    """Exchange a valid refresh token for a new access token."""
+    return await AuthService.refresh(db, body.refresh_token)
 
 
-@auth_router.post("/logout", response_model=LogoutResponse, summary="Logout")
+@router.post(
+    "/logout", response_model=LogoutResponse, summary="Logout — revoke refresh token"
+)
 async def logout(
-    response: Response,
-    request: Request,
+    body: RefreshTokenRequest,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ):
-    raw_refresh = request.cookies.get("refresh_token")
-    if raw_refresh:
-        await AuthService.logout(db, raw_refresh, current_user.id)
-    # ✅ Clear both cookies
-    response.delete_cookie("auth_token", path="/")
-    response.delete_cookie("refresh_token", path="/api/v1/auth/refresh")
-    return LogoutResponse()
+    """Revoke the provided refresh token (server-side logout)."""
+    return await AuthService.logout(db, body.refresh_token, current_user.id)
 
 
-@auth_router.patch(
+@router.patch(
     "/password", response_model=MessageResponse, summary="Change own password"
 )
 async def change_password(

@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 # from app.api.v1.routes.user_routes import user_router
 
 from app.api.v1.routes.analyze_routes import router as analyze_router
-from app.api.v1.routes.auth_routes import auth_router
+from app.api.v1.routes.auth_routes import router as auth_router
 from app.api.v1.routes.benchmark_routes import router as benchmarks_router
 from app.api.v1.routes.dashboard_routes import router as dashboard_router
 from app.api.v1.routes.ml_routes import collusion_router
