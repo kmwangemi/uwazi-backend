@@ -9,12 +9,13 @@ Provides reusable Depends() callables for:
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, List
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -49,8 +50,12 @@ async def get_current_user(
             detail="Invalid or expired token format",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
-    # Fetch user from database
-    result = await db.execute(select(User).filter(User.id == user_uuid))
+    # Fetch user from database with roles eagerly loaded
+    result = await db.execute(
+        select(User)
+        .options(selectinload(User.roles))  # <-- add this
+        .filter(User.id == user_uuid)
+    )
     user = result.scalars().first()
     if not user:
         raise HTTPException(
@@ -94,11 +99,16 @@ def require_permission(permission_name: str):
     return _check
 
 
-def require_role(*roles: str):
+def require_role(*allowed_roles: str):
 
-    def checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in roles:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+    async def checker(current_user=Depends(get_current_user)):
+        # Extract role names safely
+        user_roles: List[str] = [role.name for role in current_user.roles]
+        # Check if user has at least one required role
+        if not any(role in allowed_roles for role in user_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+            )
         return current_user
 
     return checker

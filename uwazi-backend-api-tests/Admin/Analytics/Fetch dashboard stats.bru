@@ -1,11 +1,11 @@
 meta {
-  name: Fetch dashboard overview analytics
+  name: Fetch dashboard stats
   type: http
   seq: 1
 }
 
 get {
-  url: {{prod_url}}/employer/dashboard/overview
+  url: {{local_url}}/dashboard/stats
   body: none
   auth: bearer
 }

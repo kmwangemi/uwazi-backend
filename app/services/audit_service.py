@@ -1,5 +1,5 @@
 """
-SHA Fraud Detection — Audit Service
+Procurement Monitoring System — Audit Service
 
 Writes immutable audit log entries.
 Called by every other service after state-changing operations.
@@ -11,8 +11,8 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit_log_model import AuditLog
 from app.enums import AuditAction
+from app.models.audit_log_model import AuditLog
 
 
 class AuditService:

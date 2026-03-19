@@ -7,7 +7,7 @@ Contract model — an awarded contract between a procuring entity and a supplier
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text

@@ -2,15 +2,20 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import require_role
 from app.models.supplier_model import Supplier
 from app.schemas.supplier_schema import SupplierCreate
-from app.core.dependencies import require_role
 from app.services.supplier_checker_service import compute_supplier_score
+from app.services.supplier_service import (
+    delete_supplier,
+    get_supplier_by_id,
+    get_supplier_red_flags,
+    list_suppliers,
+)
 
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
@@ -28,9 +33,7 @@ def _ghost_prob(supplier: Supplier) -> float:
             past_contracts_count=supplier.past_contracts_count,
             past_contracts_value=supplier.past_contracts_value,
         )
-        if r.get("ghost_probability") is not None:
-            return round(r["ghost_probability"], 4)
-        return round(r["combined_score"] / 100, 4)
+        return round(r.get("ghost_probability") or r["combined_score"] / 100, 4)
     except Exception:
         return round(min((supplier.risk_score or 0) / 100, 1.0), 4)
 
@@ -47,66 +50,92 @@ def _risk_level(score: Optional[float]) -> str:
     return "low"
 
 
+def serialize_director(d) -> dict:
+    return {
+        "id": str(d.id),
+        "full_name": d.full_name,
+        "national_id": d.national_id,
+        "role_title": d.role_title,
+        "phone": d.phone,
+        "email": d.email,
+        "is_politically_exposed": d.is_politically_exposed,
+        "pep_details": d.pep_details,
+    }
+
+
+def serialize_red_flag(rf) -> dict:
+    return {
+        "id": str(rf.id),
+        "flag_type": rf.flag_type,
+        "severity": rf.severity,
+        "description": rf.description,
+        "evidence": rf.evidence,
+        "source_model": rf.source_model,
+        "tender_id": str(rf.tender_id),
+        "created_at": rf.created_at.isoformat(),
+    }
+
+
+def serialize_contract(c) -> dict:
+    return {
+        "id": str(c.id),
+        "title": getattr(c, "title", None),
+        "value": getattr(c, "value", None),
+        "status": getattr(c, "status", None),
+        "awarded_at": (
+            c.awarded_at.isoformat() if getattr(c, "awarded_at", None) else None
+        ),
+    }
+
+
 @router.get("", response_model=dict)
-def list_suppliers(
+async def list_suppliers_route(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     county: Optional[str] = None,
+    is_verified: Optional[bool] = None,
+    is_blacklisted: Optional[bool] = None,
     min_risk_score: Optional[float] = Query(None),
     risk_level: Optional[str] = Query(None, description="low|medium|high|critical"),
-    has_red_flags: Optional[bool] = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """List suppliers. Public endpoint."""
-    query = db.query(Supplier)
-
-    if search:
-        query = query.filter(
-            Supplier.name.ilike(f"%{search}%")
-            | Supplier.registration_number.ilike(f"%{search}%")
-            | Supplier.kra_pin.ilike(f"%{search}%")
-        )
-    if county:
-        query = query.filter(Supplier.county.ilike(f"%{county}%"))
-    if min_risk_score is not None:
-        query = query.filter(Supplier.risk_score >= min_risk_score)
-    if risk_level:
-        lo = {"critical": 80, "high": 60, "medium": 40, "low": 0}.get(risk_level, 0)
-        hi = {"critical": 101, "high": 80, "medium": 60, "low": 40}.get(risk_level, 101)
-        query = query.filter(Supplier.risk_score >= lo, Supplier.risk_score < hi)
-    if has_red_flags is True:
-        query = query.filter(Supplier.risk_score >= 60)
-    elif has_red_flags is False:
-        query = query.filter(Supplier.risk_score < 60)
-
-    total = query.count()
-    suppliers = (
-        query.order_by(desc(Supplier.risk_score))
-        .offset((page - 1) * limit)
-        .limit(limit)
-        .all()
+    suppliers, total = await list_suppliers(
+        db,
+        search=search,
+        county=county,
+        is_verified=is_verified,
+        is_blacklisted=is_blacklisted,
+        min_risk_score=min_risk_score,
+        risk_level=risk_level,
+        page=page,
+        limit=limit,
     )
 
+    items = [
+        {
+            "id": str(s.id),
+            "name": s.name,
+            "registration_number": s.registration_number,
+            "county": s.county,
+            "company_age_days": s.company_age_days,
+            "tax_filings_count": s.tax_filings_count,
+            "risk_score": s.risk_score,
+            "risk_level": _risk_level(s.risk_score),
+            "ghost_probability": _ghost_prob(s),
+            "is_verified": s.is_verified,
+            "is_blacklisted": s.is_blacklisted,
+            "directors": [serialize_director(d) for d in (s.directors or [])],
+            "contracts_won": len(s.contracts) if s.contracts else 0,
+            "total_value_won": (
+                sum(c.contract_value or 0 for c in s.contracts) if s.contracts else 0
+            ),
+        }
+        for s in suppliers
+    ]
+
     return {
-        "items": [
-            {
-                "id": str(s.id),
-                "name": s.name,
-                "registration_number": s.registration_number,
-                "kra_pin": s.kra_pin,
-                "company_age_days": s.company_age_days,
-                "risk_score": s.risk_score,
-                "risk_level": _risk_level(s.risk_score),
-                "ghost_probability": _ghost_prob(s),
-                "past_contracts_count": s.past_contracts_count,
-                "past_contracts_value": s.past_contracts_value,
-                "is_verified": s.is_verified,
-                "county": s.county,
-                "tax_filings_count": s.tax_filings_count,
-            }
-            for s in suppliers
-        ],
+        "items": items,
         "total": total,
         "page": page,
         "limit": limit,
@@ -115,14 +144,13 @@ def list_suppliers(
 
 
 @router.get("/{supplier_id}", response_model=dict)
-def get_supplier(supplier_id: UUID, db: Session = Depends(get_db)):
-    """Full supplier detail. Public."""
-    supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Supplier not found")
-
+async def get_supplier_route(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    supplier = await get_supplier_by_id(db, supplier_id)
+    red_flags = await get_supplier_red_flags(db, supplier_id)
     risk_result = compute_supplier_score(supplier)
-    ghost_prob = _ghost_prob(supplier)
 
     return {
         "id": str(supplier.id),
@@ -137,7 +165,8 @@ def get_supplier(supplier_id: UUID, db: Session = Depends(get_db)):
         "company_age_days": supplier.company_age_days,
         "address": supplier.address,
         "county": supplier.county,
-        "directors": supplier.directors,
+        "phone": supplier.phone,
+        "email": supplier.email,
         "tax_filings_count": supplier.tax_filings_count,
         "employee_count": supplier.employee_count,
         "has_physical_address": supplier.has_physical_address,
@@ -146,18 +175,29 @@ def get_supplier(supplier_id: UUID, db: Session = Depends(get_db)):
         "past_contracts_value": supplier.past_contracts_value,
         "risk_score": supplier.risk_score,
         "risk_level": _risk_level(supplier.risk_score),
-        "ghost_probability": ghost_prob,
+        "ghost_probability": _ghost_prob(supplier),
         "risk_flags": risk_result["flags"],
         "is_verified": supplier.is_verified,
+        "is_blacklisted": supplier.is_blacklisted,
+        "verification_status": supplier.verification_status,
         "verification_notes": supplier.verification_notes,
+        "blacklist_reason": supplier.blacklist_reason,
+        "directors": [serialize_director(d) for d in (supplier.directors or [])],
+        "contracts_won": len(supplier.contracts) if supplier.contracts else 0,
+        "total_value_won": (
+            sum(c.value or 0 for c in supplier.contracts) if supplier.contracts else 0
+        ),
+        "contracts": [serialize_contract(c) for c in (supplier.contracts or [])],
+        "red_flags": [serialize_red_flag(rf) for rf in red_flags],
         "created_at": supplier.created_at.isoformat(),
+        "updated_at": supplier.updated_at.isoformat(),
     }
 
 
 @router.post("", response_model=dict, status_code=201)
-def create_supplier(
+async def create_supplier_route(
     payload: SupplierCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin", "investigator")),
 ):
     company_age_days = None
@@ -171,8 +211,8 @@ def create_supplier(
     supplier.risk_score = risk_result["score"]
 
     db.add(supplier)
-    db.commit()
-    db.refresh(supplier)
+    await db.commit()
+    await db.refresh(supplier)
 
     return {
         "id": str(supplier.id),
@@ -184,17 +224,23 @@ def create_supplier(
 
 
 @router.post("/{supplier_id}/refresh-risk", response_model=dict)
-def refresh_supplier_risk(
+async def refresh_supplier_risk(
     supplier_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin", "investigator")),
 ):
-    supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Supplier not found")
+    supplier = await get_supplier_by_id(db, supplier_id)
+    risk_result = compute_supplier_score(supplier)
+    supplier.risk_score = risk_result["score"]
+    await db.commit()
 
-    result = compute_supplier_score(supplier)
-    supplier.risk_score = result["score"]
-    db.commit()
+    return {"risk_score": risk_result["score"], "flags": risk_result["flags"]}
 
-    return {"risk_score": result["score"], "flags": result["flags"]}
+
+@router.delete("/{supplier_id}", status_code=204)
+async def delete_supplier_route(
+    supplier_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_role("admin")),
+):
+    await delete_supplier(db, supplier_id)

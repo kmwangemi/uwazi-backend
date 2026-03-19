@@ -27,7 +27,7 @@ def _get_client() -> anthropic.Anthropic:
 # ─────────────────────────────────────────────
 
 
-def analyze_tender_risk(
+async def analyze_tender_risk(
     tender_title: str,
     tender_description: Optional[str],
     estimated_value: Optional[float],
@@ -119,7 +119,7 @@ Keep response under 400 words."""
 # ─────────────────────────────────────────────
 
 
-def triage_whistleblower_report(
+async def triage_whistleblower_report(
     report_text: str,
     related_tender_title: Optional[str] = None,
 ) -> dict:
@@ -183,7 +183,7 @@ Score credibility based on: specificity of allegations, verifiable claims, consi
 # ─────────────────────────────────────────────
 
 
-def analyze_tender_specifications(
+async def analyze_tender_specifications(
     spec_text: str, tender_value: Optional[float] = None
 ) -> dict:
     """
@@ -240,7 +240,7 @@ Respond ONLY with valid JSON:
 # ─────────────────────────────────────────────
 
 
-def natural_language_query(
+async def natural_language_query(
     user_question: str,
     context_data: dict,
 ) -> str:
@@ -275,7 +275,7 @@ Provide a clear, concise answer in plain English. Use specific figures from the 
 # ─────────────────────────────────────────────
 
 
-def generate_investigation_package(
+async def generate_investigation_package(
     tender: dict,
     risk_score: dict,
     supplier: Optional[dict],

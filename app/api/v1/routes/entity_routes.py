@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.schemas.entity_schema import ProcuringEntityResponse, ProcuringEntityListResponse
+from app.schemas.entity_schema import (
+    ProcuringEntityListResponse,
+    ProcuringEntityResponse,
+)
 from app.services import entity_service
 
 entity_router = APIRouter()
@@ -17,7 +20,9 @@ DbDependency = Annotated[AsyncSession, Depends(get_db)]
 async def list_entities(
     db: DbDependency,
     search: Optional[str] = Query(None),
-    entity_type: Optional[str] = Query(None, description="MINISTRY | COUNTY | PARASTATAL | OTHER"),
+    entity_type: Optional[str] = Query(
+        None, description="MINISTRY | COUNTY | PARASTATAL | OTHER"
+    ),
     county: Optional[str] = Query(None),
     is_flagged: Optional[bool] = Query(None),
     skip: int = Query(0, ge=0),
@@ -39,6 +44,8 @@ async def get_entity(entity_id: uuid.UUID, db: DbDependency):
     return await entity_service.get_entity_by_id(db, entity_id)
 
 
-@entity_router.get("/entities/code/{entity_code}", response_model=ProcuringEntityResponse)
+@entity_router.get(
+    "/entities/code/{entity_code}", response_model=ProcuringEntityResponse
+)
 async def get_entity_by_code(entity_code: str, db: DbDependency):
     return await entity_service.get_entity_by_code(db, entity_code)

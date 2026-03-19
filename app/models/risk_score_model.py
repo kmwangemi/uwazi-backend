@@ -7,7 +7,7 @@ RiskScore model — composite ML + AI corruption analysis for a single tender.
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text

@@ -7,7 +7,7 @@ TenderDocument model — PDFs and other files attached to a tender.
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -80,7 +80,7 @@ class TenderDocument(Base):
         comment="pending / done / failed",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTtimezone.utcC)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     # ── Relationships ──────────────────────────────────────────────────────────

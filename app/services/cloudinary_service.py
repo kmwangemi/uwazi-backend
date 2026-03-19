@@ -80,4 +80,3 @@ async def upload_bid_document(
             extra={"file": file.filename, "error": str(exc)},
         )
         raise
-        raise

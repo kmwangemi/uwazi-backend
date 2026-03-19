@@ -1,0 +1,20 @@
+meta {
+  name: Train Price Collusion Vectorizer
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{local_url}}/ml/train/collusion-vectorizer
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}
+
+body:multipart-form {
+  username: mwangemik@gmail.com
+  password: Test@123
+}

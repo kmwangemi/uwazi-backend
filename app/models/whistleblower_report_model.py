@@ -8,7 +8,7 @@ procurement corruption.
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text

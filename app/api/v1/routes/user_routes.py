@@ -39,11 +39,11 @@ from app.schemas.user_schema import (
     AssignRolesRequest,
     PermissionResponse,
     RoleResponse,
+    SupplierRegisterRequest,
     UserCreate,
     UserListResponse,
     UserProfileUpdate,
     UserResponse,
-    SupplierRegisterRequest,
 )
 from app.services.user_service import UserService
 
