@@ -2,14 +2,17 @@ import uuid
 from typing import Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_
+from sqlalchemy import desc, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.functions import count
 
 from app.core.logger import get_logger
-from app.models.enums_model import RiskLevel
+from app.models.bid_model import Bid
+from app.models.red_flag_model import RedFlag
 from app.models.supplier_model import Supplier
+from app.models.tender_model import Tender
 from app.schemas.supplier_schema import SupplierCreate, SupplierUpdate
 
 logger = get_logger(__name__)
@@ -49,50 +52,73 @@ async def create_supplier(
 async def list_suppliers(
     db: AsyncSession,
     search: Optional[str] = None,
+    county: Optional[str] = None,
     is_verified: Optional[bool] = None,
     is_blacklisted: Optional[bool] = None,
-    is_ghost_likely: Optional[bool] = None,
-    tax_compliant: Optional[bool] = None,
-    risk_level: Optional[RiskLevel] = None,
-    county: Optional[str] = None,
-    agpo_group: Optional[str] = None,
-    supply_category: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
-) -> list[Supplier]:
-    query = select(Supplier)
+    min_risk_score: Optional[float] = None,
+    risk_level: Optional[str] = None,  # derived from risk_score ranges, not a column
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[Supplier], int]:
+    """Returns (suppliers, total_count)."""
+    base_query = select(Supplier)
+
     if search:
         term = f"%{search.strip()}%"
-        query = query.filter(
+        base_query = base_query.filter(
             or_(
                 Supplier.name.ilike(term),
                 Supplier.registration_number.ilike(term),
-                Supplier.county.ilike(term),
+                Supplier.kra_pin.ilike(term),
             )
         )
-    if is_verified is not None:
-        query = query.filter(Supplier.is_verified == is_verified)
-    if is_blacklisted is not None:
-        query = query.filter(Supplier.is_blacklisted == is_blacklisted)
-    if is_ghost_likely is not None:
-        query = query.filter(Supplier.is_ghost_likely == is_ghost_likely)
-    if tax_compliant is not None:
-        query = query.filter(Supplier.tax_compliant == tax_compliant)
-    if risk_level is not None:
-        query = query.filter(Supplier.risk_level == risk_level)
     if county is not None:
-        query = query.filter(Supplier.county.ilike(f"%{county}%"))
-    if agpo_group is not None:
-        query = query.filter(Supplier.agpo_group == agpo_group)
-    if supply_category is not None:
-        query = query.filter(Supplier.supply_category.ilike(f"%{supply_category}%"))
-    query = query.order_by(Supplier.created_at.desc()).offset(skip).limit(limit)
-    result = await db.execute(query)
-    return result.scalars().all()
+        base_query = base_query.filter(Supplier.county.ilike(f"%{county}%"))
+    if is_verified is not None:
+        base_query = base_query.filter(Supplier.is_verified == is_verified)
+    if is_blacklisted is not None:
+        base_query = base_query.filter(Supplier.is_blacklisted == is_blacklisted)
+    if min_risk_score is not None:
+        base_query = base_query.filter(Supplier.risk_score >= min_risk_score)
+    if risk_level:
+        bands = {
+            "critical": (80, 101),
+            "high": (60, 80),
+            "medium": (40, 60),
+            "low": (0, 40),
+        }
+        lo, hi = bands.get(risk_level, (0, 101))
+        base_query = base_query.filter(
+            Supplier.risk_score >= lo, Supplier.risk_score < hi
+        )
+
+    total = await db.scalar(select(count()).select_from(base_query.subquery())) or 0
+
+    data_query = (
+        base_query.options(
+            selectinload(Supplier.directors),
+            selectinload(Supplier.contracts),
+        )
+        .order_by(desc(Supplier.risk_score))
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    suppliers = (await db.execute(data_query)).unique().scalars().all()
+    return suppliers, total
 
 
-async def get_supplier_by_id(db: AsyncSession, supplier_id: uuid.UUID) -> Supplier:
-    result = await db.execute(select(Supplier).filter(Supplier.id == supplier_id))
+async def get_supplier_by_id(
+    db: AsyncSession,
+    supplier_id: uuid.UUID,
+) -> Supplier:
+    result = await db.execute(
+        select(Supplier)
+        .options(
+            selectinload(Supplier.directors),
+            selectinload(Supplier.contracts),
+        )
+        .filter(Supplier.id == supplier_id)
+    )
     supplier = result.scalars().first()
     if not supplier:
         raise HTTPException(
@@ -100,6 +126,21 @@ async def get_supplier_by_id(db: AsyncSession, supplier_id: uuid.UUID) -> Suppli
             detail="Supplier not found.",
         )
     return supplier
+
+
+async def get_supplier_red_flags(
+    db: AsyncSession,
+    supplier_id: uuid.UUID,
+) -> list[RedFlag]:
+    """Traverse Supplier → Bid → Tender → RedFlag (no direct FK exists)."""
+    result = await db.execute(
+        select(RedFlag)
+        .join(Tender, Tender.id == RedFlag.tender_id)
+        .join(Bid, Bid.tender_id == Tender.id)
+        .filter(Bid.supplier_id == supplier_id)
+        .distinct()
+    )
+    return result.scalars().all()
 
 
 async def update_supplier(
@@ -129,7 +170,10 @@ async def update_supplier(
         ) from e
 
 
-async def delete_supplier(db: AsyncSession, supplier_id: uuid.UUID) -> None:
+async def delete_supplier(
+    db: AsyncSession,
+    supplier_id: uuid.UUID,
+) -> None:
     try:
         supplier = await get_supplier_by_id(db, supplier_id)
         await db.delete(supplier)

@@ -6,14 +6,13 @@ from pydantic import BaseModel, Field
 
 
 class WhistleblowerCreate(BaseModel):
-    report_text: Optional[str] = Field(None, min_length=50)
-    description: Optional[str] = Field(None, min_length=50)
     allegation_type: Optional[str] = None
     tender_id: Optional[UUID] = None
-    tender_reference: Optional[str] = None
+    tender_reference: Optional[str] = None  # free-text ref e.g. "KCAC/2026/001"
     entity_name: Optional[str] = None
+    description: str = Field(..., min_length=50)  # maps to report_text
     evidence_description: Optional[str] = None
-    contact_preference: Optional[str] = "none"
+    contact_preference: Optional[str] = "none"  # collected but not stored
 
     def get_report_text(self) -> str:
         return self.report_text or self.description or ""

@@ -1,5 +1,5 @@
 """
-SHA Fraud Detection — Security Utilities
+Procurement Monitoring System — Security Utilities
 Handles:
   - Password hashing & verification (pwdlib)
   - JWT access & refresh token creation
@@ -7,7 +7,7 @@ Handles:
 """
 
 import hashlib
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
@@ -39,7 +39,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     Payload should include at minimum: {"sub": str(user_id)}
     """
     to_encode = data.copy()
-    expire = datetime.now(UTC) + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire, "type": "access"})
@@ -54,7 +54,9 @@ def create_refresh_token(data: dict) -> str:
     Stored hashed in DB to allow server-side revocation.
     """
     to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
     to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(
         to_encode, settings.SECRET_KEY.get_secret_value(), algorithm=settings.ALGORITHM

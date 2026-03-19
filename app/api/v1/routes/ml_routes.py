@@ -1,88 +1,96 @@
 """
 ML Management routes:
-  POST /api/ml/train/xgboost-synthetic   Bootstrap XGBoost with synthetic data
-  POST /api/ml/train/price-anomaly       Train IF on current DB price records
-  GET  /api/ml/status                    Which models are trained
-
-Spending forecast route:
-  GET  /api/ml/spending-forecast/{entity_id}  Prophet time-series for entity
+  GET  /api/ml/status
+  GET  /api/ml/performance
+  POST /api/ml/train/xgboost-synthetic
+  POST /api/ml/train/price-anomaly
+  POST /api/ml/train/collusion-vectorizer
+  POST /api/ml/train/supplier-rf
+  POST /api/ml/train/supplier-if
+  GET  /api/ml/spending-forecast/{entity_id}
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import require_role
 from app.models.contract_model import Contract
 from app.models.procuring_entity_model import ProcuringEntity
-from app.core.dependencies import require_role
+from app.services.ml_service import (
+    get_model_status,
+    train_supplier_if,
+    train_supplier_rf,
+)
 
 router = APIRouter(prefix="/ml", tags=["ML Models"])
 
 
+# ── Status ─────────────────────────────────────────────────────────────────────
+
+
 @router.get("/status")
-def model_status():
+async def model_status():
     """Which ML models are trained and available."""
-    import os
-
-    weights_dir = os.path.join(os.path.dirname(__file__), "..", "ml", "weights")
-
-    def exists(name):
-        return os.path.exists(os.path.join(weights_dir, name))
-
+    models = get_model_status()
+    trained_count = sum(1 for m in models if m["trained"])
+    untrained_count = sum(1 for m in models if not m["trained"] and m["trainable"])
     return {
-        "models": {
-            "price_anomaly_isolation_forest": {
-                "trained": exists("price_anomaly_if.pkl"),
-                "layer": "Layer 2 — Price Inflation",
-                "library": "sklearn.IsolationForest",
-            },
-            "supplier_random_forest": {
-                "trained": exists("supplier_rf.pkl"),
-                "layer": "Layer 3 — Ghost Supplier",
-                "library": "sklearn.RandomForestClassifier",
-            },
-            "supplier_isolation_forest": {
-                "trained": exists("supplier_if.pkl"),
-                "layer": "Layer 3 — Ghost Supplier",
-                "library": "sklearn.IsolationForest",
-            },
-            "collusion_tfidf_vectorizer": {
-                "trained": exists("collusion_tfidf.pkl"),
-                "layer": "Layer 4 — Collusion",
-                "library": "sklearn.TfidfVectorizer",
-            },
-            "spec_spacy_nlp": {
-                "trained": _spacy_available(),
-                "layer": "Layer 4 — Spec Analysis",
-                "library": "spacy.en_core_web_sm",
-            },
-            "xgboost_risk_model": {
-                "trained": exists("xgb_risk_model.pkl"),
-                "layer": "Layer 5 — Corruption Risk Score",
-                "library": "xgboost.XGBClassifier",
-            },
-            "prophet_spending": {
-                "trained": _prophet_available(),
-                "layer": "Layer 6 — Temporal Patterns",
-                "library": "prophet",
-            },
-            "claude_llm": {
-                "trained": _claude_available(),
-                "layer": "Cross-cutting — Narratives & Triage",
-                "library": "anthropic.claude-opus-4-6",
-            },
-        }
+        "models": models,
+        "total": len(models),
+        "trained_count": trained_count,
+        "untrained_count": untrained_count,
     }
 
 
+# ── Performance (synthetic scores until eval pipeline exists) ──────────────────
+
+
+@router.get("/performance")
+async def model_performance():
+    """
+    Per-model performance metrics.
+    Returns real accuracy from model metadata if available,
+    otherwise returns None so the frontend can show 'Not evaluated'.
+    """
+    import os
+    import pickle
+
+    WEIGHTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "weights")
+
+    def load_score(pkl_path: str, metric_key: str = "cv_score") -> float | None:
+        meta_path = pkl_path.replace(".pkl", "_meta.pkl")
+        if os.path.exists(meta_path):
+            with open(meta_path, "rb") as f:
+                meta = pickle.load(f)
+            return meta.get(metric_key)
+        return None
+
+    models = get_model_status()
+    performance = []
+    for m in models:
+        if not m["trained"]:
+            continue
+        performance.append(
+            {
+                "id": m["id"],
+                "name": m["name"],
+                "accuracy": load_score(
+                    os.path.join(WEIGHTS_DIR, f"{m['id']}.pkl")
+                ),  # None if not saved
+            }
+        )
+    return {"items": performance}
+
+
+# ── Training endpoints ─────────────────────────────────────────────────────────
+
+
 @router.post("/train/xgboost-synthetic")
-def train_xgboost_synthetic(user=Depends(require_role("admin"))):
-    """
-    Bootstrap XGBoost with synthetic data based on known Kenya corruption patterns.
-    Use until real EACC-labeled data is available.
-    """
+async def train_xgboost_synthetic(user=Depends(require_role("admin"))):
     try:
         from app.ml.xgb_risk_model import train_with_synthetic_data
 
@@ -93,42 +101,40 @@ def train_xgboost_synthetic(user=Depends(require_role("admin"))):
         }
     except ImportError as e:
         raise HTTPException(status_code=500, detail=f"xgboost not installed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/train/price-anomaly")
-def train_price_anomaly(
-    user=Depends(require_role("admin")), db: Session = Depends(get_db)
+async def train_price_anomaly(
+    user=Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Train IsolationForest on current DB tender+benchmark records.
-    Requires at least 100 tenders with benchmark matches.
-    """
     from app.models.price_benchmark_model import PriceBenchmark
     from app.models.tender_model import Tender
 
-    tenders = (
-        db.query(Tender)
-        .filter(
+    result = await db.execute(
+        select(Tender).filter(
             Tender.estimated_value.isnot(None),
             Tender.category.isnot(None),
         )
-        .all()
     )
+    tenders = result.scalars().all()
 
     if len(tenders) < 50:
         raise HTTPException(
             status_code=400,
-            detail=f"Need at least 50 tenders to train. Currently have {len(tenders)}.",
+            detail=f"Need at least 50 tenders. Currently have {len(tenders)}.",
         )
 
     records = []
     for t in tenders:
-        # Find benchmark
-        bench = (
-            db.query(PriceBenchmark)
-            .filter(PriceBenchmark.category.ilike(f"%{t.category}%"))
-            .first()
+        bench_result = await db.execute(
+            select(PriceBenchmark).filter(
+                PriceBenchmark.category.ilike(f"%{t.category}%")
+            )
         )
+        bench = bench_result.scalars().first()
         if bench:
             records.append(
                 {
@@ -153,16 +159,19 @@ def train_price_anomaly(
         return {"status": "success", "records_used": len(records)}
     except ImportError as e:
         raise HTTPException(status_code=500, detail=f"sklearn not installed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/train/collusion-vectorizer")
-def train_collusion_vectorizer(
-    user=Depends(require_role("admin")), db: Session = Depends(get_db)
+async def train_collusion_vectorizer(
+    user=Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Fit TF-IDF vectorizer on all bid proposal texts in DB."""
     from app.models.bid_model import Bid
 
-    bids = db.query(Bid).filter(Bid.proposal_text.isnot(None)).all()
+    result = await db.execute(select(Bid).filter(Bid.proposal_text.isnot(None)))
+    bids = result.scalars().all()
     texts = [
         b.proposal_text for b in bids if b.proposal_text and len(b.proposal_text) > 50
     ]
@@ -179,37 +188,74 @@ def train_collusion_vectorizer(
         return {"status": "success", "texts_used": len(texts)}
     except ImportError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/train/supplier-rf")
+async def train_supplier_rf_route(
+    user=Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await train_supplier_rf(db)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"sklearn not installed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/train/supplier-if")
+async def train_supplier_if_route(
+    user=Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await train_supplier_if(db)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"sklearn not installed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Spending forecast ──────────────────────────────────────────────────────────
 
 
 @router.get("/spending-forecast/{entity_id}")
-def get_spending_forecast(
+async def get_spending_forecast(
     entity_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin", "investigator")),
 ):
-    """
-    Prophet time-series spending forecast + anomaly detection for a procuring entity.
-    Detects year-end budget rushes and pre-election spending spikes.
-    """
-    entity = db.query(ProcuringEntity).filter(ProcuringEntity.id == entity_id).first()
+    result = await db.execute(
+        select(ProcuringEntity).filter(ProcuringEntity.id == entity_id)
+    )
+    entity = result.scalars().first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
-    # Aggregate contract awards by date
     from app.models.tender_model import Tender
 
-    contracts = (
-        db.query(Contract)
+    result = await db.execute(
+        select(Contract)
         .join(Tender)
         .filter(Tender.entity_id == entity_id, Contract.awarded_at.isnot(None))
-        .all()
     )
+    contracts = result.scalars().all()
 
     if len(contracts) < 10:
         return {
-            "entity": entity.name,
-            "message": f"Insufficient data: {len(contracts)} contracts. Need 30+ for forecast.",
+            "entity_id": str(entity_id),
+            "entity_name": entity.name,
+            "message": f"Insufficient data: {len(contracts)} contracts. Need 30+.",
             "anomalies": [],
+            "forecast": [],
         }
 
     spend_records = [
@@ -225,31 +271,29 @@ def get_spending_forecast(
     return result
 
 
-# ── Collusion analysis for a specific tender ──────────────────────────────────
+# ── Collusion analysis ─────────────────────────────────────────────────────────
 
 collusion_router = APIRouter(prefix="/tenders", tags=["Collusion Detection"])
 
 
 @collusion_router.get("/{tender_id}/collusion-analysis")
-def analyse_tender_collusion(
+async def analyse_tender_collusion(
     tender_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin", "investigator")),
 ):
-    """Run TF-IDF collusion analysis on all bids for a tender."""
     from app.models.bid_model import Bid
     from app.models.tender_model import Tender
 
-    tender = db.query(Tender).filter(Tender.id == tender_id).first()
+    tender_result = await db.execute(select(Tender).filter(Tender.id == tender_id))
+    tender = tender_result.scalars().first()
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
 
-    bids = db.query(Bid).filter(Bid.tender_id == tender_id).all()
+    bids_result = await db.execute(select(Bid).filter(Bid.tender_id == tender_id))
+    bids = bids_result.scalars().all()
     if len(bids) < 2:
-        return {
-            "tender_id": str(tender_id),
-            "message": "Need at least 2 bids for collusion analysis",
-        }
+        return {"tender_id": str(tender_id), "message": "Need at least 2 bids"}
 
     from app.ml.collusion import detect_bid_collusion
 
@@ -267,29 +311,15 @@ def analyse_tender_collusion(
     return result
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+@router.get("/entities")
+async def list_entities_for_forecast(db: AsyncSession = Depends(get_db)):
+    """Lightweight entity list for the spending forecast dropdown."""
+    from sqlalchemy import select
 
+    from app.models.procuring_entity_model import ProcuringEntity
 
-def _spacy_available() -> bool:
-    try:
-        import spacy
-
-        spacy.load("en_core_web_sm")
-        return True
-    except Exception:
-        return False
-
-
-def _prophet_available() -> bool:
-    try:
-        from prophet import Prophet  # noqa
-
-        return True
-    except ImportError:
-        return False
-
-
-def _claude_available() -> bool:
-    from app.core.config import settings
-
-    return bool(settings.ANTHROPIC_API_KEY)
+    result = await db.execute(
+        select(ProcuringEntity.id, ProcuringEntity.name).order_by(ProcuringEntity.name)
+    )
+    rows = result.all()
+    return {"items": [{"id": str(r.id), "name": r.name} for r in rows]}

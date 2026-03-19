@@ -1,11 +1,11 @@
 """
-SHA Fraud Detection — Auth Service
+Procurement Monitoring System — Auth Service
 
 Handles: login, token refresh, logout, password change.
 """
 
 import uuid
-from datetime import timezone, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
@@ -58,7 +58,11 @@ class AuthService:
         )
         user = result.scalars().first()
         # ── Account lockout check ──────────────────────────────────────────
-        if user and user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        if (
+            user
+            and user.locked_until
+            and user.locked_until > datetime.now(timezone.utc)
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Account locked until {user.locked_until.isoformat()}. Contact admin.",

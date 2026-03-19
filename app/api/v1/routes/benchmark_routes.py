@@ -2,7 +2,8 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_role
@@ -13,26 +14,30 @@ router = APIRouter(prefix="/benchmarks", tags=["Price Benchmarks"])
 
 
 @router.get("", response_model=dict)
-def list_benchmarks(
+async def list_benchmarks(
     category: Optional[str] = None,
     search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    query = db.query(PriceBenchmark)
+    query = select(PriceBenchmark)
     if category:
         query = query.filter(PriceBenchmark.category.ilike(f"%{category}%"))
     if search:
         query = query.filter(PriceBenchmark.item_name.ilike(f"%{search}%"))
 
-    total = query.count()
-    items = (
+    total_result = await db.scalar(
+        query.with_only_columns(func.count(PriceBenchmark.id))
+    )
+    total = total_result or 0
+    query = (
         query.order_by(PriceBenchmark.category, PriceBenchmark.item_name)
         .offset((page - 1) * limit)
         .limit(limit)
-        .all()
     )
+    result = await db.execute(query)
+    items = result.scalars().all()
 
     return {
         "items": [
@@ -55,47 +60,49 @@ def list_benchmarks(
 
 
 @router.post("", response_model=dict, status_code=201)
-def create_benchmark(
+async def create_benchmark(
     payload: PriceBenchmarkCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin")),
 ):
     benchmark = PriceBenchmark(**payload.model_dump())
     db.add(benchmark)
-    db.commit()
-    db.refresh(benchmark)
+    await db.commit()
+    await db.refresh(benchmark)
     return {"id": str(benchmark.id), "item_name": benchmark.item_name}
 
 
 @router.put("/{benchmark_id}", response_model=dict)
-def update_benchmark(
+async def update_benchmark(
     benchmark_id: UUID,
     payload: PriceBenchmarkCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin")),
 ):
-    benchmark = (
-        db.query(PriceBenchmark).filter(PriceBenchmark.id == benchmark_id).first()
+    result = await db.execute(
+        select(PriceBenchmark).filter(PriceBenchmark.id == benchmark_id)
     )
+    benchmark = result.scalars().first()
     if not benchmark:
         raise HTTPException(status_code=404, detail="Benchmark not found")
 
     for key, val in payload.model_dump().items():
         setattr(benchmark, key, val)
-    db.commit()
+    await db.commit()
     return {"id": str(benchmark_id), "updated": True}
 
 
 @router.delete("/{benchmark_id}", status_code=204)
-def delete_benchmark(
+async def delete_benchmark(
     benchmark_id: UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin")),
 ):
-    benchmark = (
-        db.query(PriceBenchmark).filter(PriceBenchmark.id == benchmark_id).first()
+    result = await db.execute(
+        select(PriceBenchmark).filter(PriceBenchmark.id == benchmark_id)
     )
+    benchmark = result.scalars().first()
     if not benchmark:
         raise HTTPException(status_code=404, detail="Benchmark not found")
-    db.delete(benchmark)
-    db.commit()
+    await db.delete(benchmark)
+    await db.commit()

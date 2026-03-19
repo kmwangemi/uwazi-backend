@@ -6,9 +6,11 @@ from sqlalchemy import or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.logger import get_logger
 from app.enums import RiskLevel, TenderStatus
+from app.models.risk_score_model import RiskScore
 from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate, TenderUpdate
 from app.services.entity_service import get_or_create_entity
@@ -65,41 +67,6 @@ async def create_tender(
         ) from e
 
 
-# async def create_tender(
-#     db: AsyncSession,
-#     tender_data: TenderCreate,
-#     created_by: uuid.UUID,
-#     attachments: list[dict] | None = None,
-# ) -> Tender:
-#     try:
-#         result = await db.execute(
-#             select(Tender).filter(Tender.reference_number == tender_data.reference_number)
-#         )
-#         if result.scalars().first():
-#             raise HTTPException(
-#                 status_code=status.HTTP_400_BAD_REQUEST,
-#                 detail="A tender with this reference number already exists.",
-#             )
-#         new_tender = Tender(
-#             **tender_data.model_dump(exclude={"attachments"}),
-#             created_by=created_by,
-#             attachments=attachments or [],
-#         )
-#         db.add(new_tender)
-#         await db.commit()
-#         await db.refresh(new_tender)
-#         return new_tender
-#     except HTTPException:
-#         raise
-#     except SQLAlchemyError as e:
-#         await db.rollback()
-#         logger.error("Failed to create tender", extra={"error": str(e)})
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail="Failed to create tender.",
-#         ) from e
-
-
 async def list_tenders(
     db: AsyncSession,
     search: Optional[str] = None,
@@ -111,7 +78,13 @@ async def list_tenders(
     skip: int = 0,
     limit: int = 50,
 ) -> list[Tender]:
-    query = select(Tender)
+    query = select(Tender).options(
+        joinedload(Tender.entity),  # single row JOIN — efficient
+        selectinload(Tender.risk_score),  # one-to-one via separate query
+        selectinload(Tender.red_flags),  # one-to-many
+        selectinload(Tender.bids),  # one-to-many
+        selectinload(Tender.documents),  # one-to-many
+    )
     if search:
         term = f"%{search.strip()}%"
         query = query.filter(
@@ -126,9 +99,12 @@ async def list_tenders(
         query = query.filter(Tender.county.ilike(f"%{county}%"))
     if category is not None:
         query = query.filter(Tender.category.ilike(f"%{category}%"))
+    # risk_level filter — joins RiskScore and filters by its level field
+    if risk_level is not None:
+        query = query.join(Tender.risk_score).filter(RiskScore.level == risk_level)
     query = query.order_by(Tender.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    return result.unique().scalars().all()  # .unique() required when using joinedload
 
 
 async def get_tender_by_id(db: AsyncSession, tender_id: uuid.UUID) -> Tender:

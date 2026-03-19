@@ -7,7 +7,7 @@ PriceBenchmark model — market reference prices used for deviation analysis.
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import DateTime, Float, Index, Integer, String

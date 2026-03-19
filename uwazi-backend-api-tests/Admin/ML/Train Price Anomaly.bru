@@ -1,0 +1,20 @@
+meta {
+  name: Train Price Anomaly
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{local_url}}/ml/train/price-anomaly
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}
+
+body:multipart-form {
+  username: mwangemik@gmail.com
+  password: Test@123
+}

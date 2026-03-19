@@ -73,6 +73,7 @@ from app.models.tender_model import Tender  # noqa: F401
 # ── Models (import order = FK dependency order) ───────────────────────────────
 from app.models.user_model import User  # noqa: F401
 from app.models.whistleblower_report_model import WhistleblowerReport  # noqa: F401
+from app.models.investigation_model import Investigation
 
 __all__ = [
     # Models
@@ -111,4 +112,5 @@ __all__ = [
     "TenderStatus",
     "UserRole",
     "WhistleblowerUrgency",
+    "Investigation",
 ]

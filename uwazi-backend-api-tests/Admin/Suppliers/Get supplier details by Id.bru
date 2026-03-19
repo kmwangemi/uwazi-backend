@@ -1,0 +1,15 @@
+meta {
+  name: Get supplier details by Id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{local_url}}/suppliers/1fd5c19d-8a2a-45c7-937d-09f041c6c05a
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}

@@ -1,8 +1,5 @@
 import re
 import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -12,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.logger import get_logger
-from app.models.entity_model import ProcuringEntity
+from app.models.procuring_entity_model import ProcuringEntity
 
 logger = get_logger(__name__)
 
@@ -21,6 +18,7 @@ def _generate_entity_code(entity_name: str, entity_type: str) -> str:
     slug = re.sub(r"[^A-Z0-9]", "", entity_name.upper())[:8]
     type_slug = re.sub(r"[^A-Z0-9]", "", entity_type.upper())[:6]  # clean + uppercase
     return f"{slug}-{type_slug}"
+
 
 async def get_or_create_entity(
     db: AsyncSession,
@@ -137,7 +135,9 @@ async def get_entity_by_code(
     """Fetch a single procuring entity by its entity code."""
     try:
         result = await db.execute(
-            select(ProcuringEntity).filter(ProcuringEntity.entity_code == entity_code.upper())
+            select(ProcuringEntity).filter(
+                ProcuringEntity.entity_code == entity_code.upper()
+            )
         )
         entity = result.scalars().first()
         if not entity:

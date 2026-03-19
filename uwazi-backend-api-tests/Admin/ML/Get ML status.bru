@@ -1,0 +1,15 @@
+meta {
+  name: Get ML status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{local_url}}/ml/status
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}

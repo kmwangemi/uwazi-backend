@@ -16,17 +16,13 @@ from app.core.logger import get_logger, setup_logging
 setup_logging()
 logger = get_logger(__name__)
 
-# from app.api.v1.routes.auth_routes import auth_router
-# from app.api.v1.routes.bid_routes import bid_router
-# from app.api.v1.routes.entity_routes import entity_router
-# from app.api.v1.routes.supplier_routes import supplier_router
-# from app.api.v1.routes.tender_routes import tender_router
-# from app.api.v1.routes.user_routes import user_router
-
+from app.api.v1.routes.analytics_routes import router as analytics_router
 from app.api.v1.routes.analyze_routes import router as analyze_router
 from app.api.v1.routes.auth_routes import router as auth_router
 from app.api.v1.routes.benchmark_routes import router as benchmarks_router
+from app.api.v1.routes.county_risk_routes import router as county_risk_router
 from app.api.v1.routes.dashboard_routes import router as dashboard_router
+from app.api.v1.routes.investigation_routes import router as investigation_router
 from app.api.v1.routes.ml_routes import collusion_router
 from app.api.v1.routes.ml_routes import router as ml_router
 
@@ -100,6 +96,9 @@ app.include_router(
 app.include_router(
     collusion_router, prefix=PREFIX
 )  # GET /api/tenders/{id}/collusion-analysis
+app.include_router(county_risk_router, prefix=PREFIX)
+app.include_router(analytics_router, prefix=PREFIX)
+app.include_router(investigation_router, prefix=PREFIX)
 
 
 @app.get("/", tags=["Health"])
@@ -114,5 +113,4 @@ def root():
 
 @app.get("/health", tags=["Health"])
 def health():
-    return {"status": "ok"}
     return {"status": "ok"}

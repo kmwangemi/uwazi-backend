@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # ── ML Model ──────────────────────────────────────────────────────────────
     ML_MODEL_PATH: str = "ml_models"
     ML_MODEL_FALLBACK_ENABLED: bool = True
+    ANTHROPIC_API_KEY: str = ""
     # ── Alert Settings ────────────────────────────────────────────────────────
     ALERT_AUTO_ESCALATE_HOURS: int = 24
     ALERT_EXPIRE_HOURS: int = 72

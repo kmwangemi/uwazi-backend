@@ -1,0 +1,37 @@
+meta {
+  name: Create tender
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{local_url}}/tenders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}
+
+body:json {
+  {
+    "amount": "90000000",
+    "attachments": [],
+    "category": "Medical Equipment & Supplies",
+    "contactEmail": "procurement@go.ke",
+    "county": "Busia",
+    "deadline": "2026-03-18",
+    "declarationAccepted": true,
+    "description": "delivery of medical equipments",
+    "entityName": "kenya medical suppliers",
+    "entityType": "Ministry / State Department",
+    "openingDate": "2026-04-06",
+    "procurementMethod": "Open International Tender (OIT)",
+    "sourceOfFunds": "County Own Source Revenue",
+    "tenderSecurityAmount": "120000",
+    "tenderSecurityForm": "Insurance Bond",
+    "tender_number": "MOT/MOH/10/2023",
+    "title": "supply and delivery of medical equipments"
+  }
+}

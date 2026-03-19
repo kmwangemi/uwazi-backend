@@ -15,7 +15,8 @@ PIPELINE (per tender)
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RiskLevel
 from app.models.red_flag_model import RedFlag
@@ -45,8 +46,8 @@ def _days_to_deadline(tender: Tender) -> Optional[int]:
     return None
 
 
-def compute_and_save_risk(
-    db: Session,
+async def compute_and_save_risk(
+    db: AsyncSession,
     tender: Tender,
     supplier: Optional[Supplier] = None,
     bids: Optional[list] = None,
@@ -56,7 +57,7 @@ def compute_and_save_risk(
     all_flags = []
 
     # ── Step 1: Price — rule-based + IsolationForest ─────────────────────────
-    price_result = compute_price_score(
+    price_result = await compute_price_score(
         db, tender.estimated_value, tender.category, tender.title
     )
     price_score = price_result["score"]
@@ -125,7 +126,7 @@ def compute_and_save_risk(
     # ── Step 3: Spec — rules + spaCy NER ─────────────────────────────────────
     from app.services.spec_analyzer_service import compute_spec_score
 
-    rule_spec = compute_spec_score(tender.description)
+    rule_spec = await compute_spec_score(tender.description)
     all_flags.extend(rule_spec["flags"])
     spec_score = rule_spec["score"]
 
@@ -220,7 +221,7 @@ def compute_and_save_risk(
         try:
             from app.services.ai_service import analyze_tender_risk
 
-            ai_r = analyze_tender_risk(
+            ai_r = await analyze_tender_risk(
                 tender_title=tender.title,
                 tender_description=tender.description,
                 estimated_value=tender.estimated_value,
@@ -244,7 +245,10 @@ def compute_and_save_risk(
 
     entity_score = tender.entity.corruption_history_score if tender.entity else 0.0
 
-    existing = db.query(RiskScore).filter(RiskScore.tender_id == tender.id).first()
+    result = await db.execute(
+        select(RiskScore).filter(RiskScore.tender_id == tender.id)
+    )
+    existing = result.scalars().first()
     if existing:
         existing.price_score = price_score
         existing.supplier_score = supplier_score
@@ -275,7 +279,7 @@ def compute_and_save_risk(
         db.add(rso)
 
     # Save red flags
-    db.query(RedFlag).filter(RedFlag.tender_id == tender.id).delete()
+    await db.execute(RedFlag.__table__.delete().where(RedFlag.tender_id == tender.id))
     sev = {
         "CRITICAL": "critical",
         "HIGH": "high",
@@ -312,6 +316,6 @@ def compute_and_save_risk(
             )
         )
 
-    db.commit()
-    db.refresh(rso)
+    await db.commit()
+    await db.refresh(rso)
     return rso

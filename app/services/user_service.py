@@ -21,17 +21,17 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.security import hash_password
-from app.models.enums_model import AuditAction
+from app.enums import AuditAction
 from app.models.permission_model import Permission
 from app.models.role_model import Role
 from app.models.user_model import User
 from app.schemas.user_schema import (
     AssignRolesRequest,
+    SupplierRegisterRequest,
     UserCreate,
     UserListResponse,
     UserProfileUpdate,
     UserResponse,
-    SupplierRegisterRequest,
 )
 from app.services.audit_service import AuditService
 
@@ -118,9 +118,7 @@ class UserService:
                 detail=f"An account with email '{data.email}' already exists",
             )
         # ── Resolve the supplier role ────────────────────────────────────────
-        role_result = await db.execute(
-            select(Role).filter(Role.name == "supplier")
-        )
+        role_result = await db.execute(select(Role).filter(Role.name == "supplier"))
         supplier_role = role_result.scalars().first()
         if not supplier_role:
             raise HTTPException(

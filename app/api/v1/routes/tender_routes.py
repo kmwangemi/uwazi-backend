@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.database import get_db
@@ -33,99 +33,176 @@ async def list_tenders(
     date_from: Optional[str] = Query(None, description="ISO date e.g. 2026-01-01"),
     date_to: Optional[str] = Query(None, description="ISO date e.g. 2026-12-31"),
     sort_by: Optional[str] = Query(
-        "created_at", description="created_at|estimated_value|total_score"
+        "created_at", description="created_at | estimated_value | total_score"
     ),
-    sort_order: Optional[str] = Query("desc", description="asc|desc"),
+    sort_order: Optional[str] = Query("desc", description="asc | desc"),
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """List tenders with filters, sorting, and pagination. Public endpoint."""
-    query = select(Tender).options(
-        joinedload(Tender.risk_score),
-        joinedload(Tender.red_flags),
-        joinedload(Tender.bids),
-    )
 
+    base_query = select(Tender)
+
+    # ── Filters ────────────────────────────────────────────────────────────────
     if county:
-        query = query.filter(Tender.county.ilike(f"%{county}%"))
+        base_query = base_query.filter(Tender.county.ilike(f"%{county}%"))
     if category:
-        query = query.filter(Tender.category.ilike(f"%{category}%"))
+        base_query = base_query.filter(Tender.category.ilike(f"%{category}%"))
     if status:
-        query = query.filter(Tender.status == status)
+        base_query = base_query.filter(Tender.status == status)
     if procurement_method:
-        query = query.filter(Tender.procurement_method == procurement_method)
+        base_query = base_query.filter(Tender.procurement_method == procurement_method)
     if min_value is not None:
-        query = query.filter(Tender.estimated_value >= min_value)
+        base_query = base_query.filter(Tender.estimated_value >= min_value)
     if max_value is not None:
-        query = query.filter(Tender.estimated_value <= max_value)
+        base_query = base_query.filter(Tender.estimated_value <= max_value)
     if date_from:
         try:
-            query = query.filter(Tender.created_at >= datetime.fromisoformat(date_from))
+            base_query = base_query.filter(
+                Tender.created_at >= datetime.fromisoformat(date_from)
+            )
         except ValueError:
-            pass
+            raise HTTPException(
+                status_code=400, detail=f"Invalid date_from format: {date_from!r}"
+            )
     if date_to:
         try:
-            query = query.filter(Tender.created_at <= datetime.fromisoformat(date_to))
+            base_query = base_query.filter(
+                Tender.created_at <= datetime.fromisoformat(date_to)
+            )
         except ValueError:
-            pass
+            raise HTTPException(
+                status_code=400, detail=f"Invalid date_to format: {date_to!r}"
+            )
     if search:
-        query = query.filter(
+        base_query = base_query.filter(
             Tender.title.ilike(f"%{search}%")
             | Tender.description.ilike(f"%{search}%")
             | Tender.reference_number.ilike(f"%{search}%")
         )
     if risk_level:
-        query = query.join(RiskScore, RiskScore.tender_id == Tender.id).filter(
-            RiskScore.risk_level == risk_level
-        )
+        base_query = base_query.join(
+            RiskScore, RiskScore.tender_id == Tender.id
+        ).filter(RiskScore.risk_level == risk_level)
 
-    # Sorting
+    # ── Sorting ────────────────────────────────────────────────────────────────
     order_fn = desc if sort_order == "desc" else asc
     if sort_by == "estimated_value":
-        query = query.order_by(order_fn(Tender.estimated_value))
+        base_query = base_query.order_by(order_fn(Tender.estimated_value))
     elif sort_by == "total_score":
-        if risk_level is None:  # avoid double join
-            query = query.outerjoin(RiskScore, RiskScore.tender_id == Tender.id)
-        query = query.order_by(order_fn(RiskScore.total_score))
+        if risk_level is None:
+            base_query = base_query.outerjoin(
+                RiskScore, RiskScore.tender_id == Tender.id
+            )
+        base_query = base_query.order_by(order_fn(RiskScore.total_score))
     else:
-        query = query.order_by(order_fn(Tender.created_at))
+        base_query = base_query.order_by(order_fn(Tender.created_at))
 
-    # Count total
-    count_query = select(count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
+    # ── Count (clean, before pagination + load options) ────────────────────────
+    count_query = select(count()).select_from(base_query.subquery())
+    total = (await db.execute(count_query)).scalar()
 
-    # Paginate
-    query = query.offset((page - 1) * limit).limit(limit)
-    result = await db.execute(query)
-    tenders = result.unique().scalars().all()
-
-    items = []
-    for t in tenders:
-        items.append(
-            {
-                "id": str(t.id),
-                "reference_number": t.reference_number,
-                "title": t.title,
-                "category": t.category,
-                "estimated_value": t.estimated_value,
-                "county": t.county,
-                "procurement_method": (
-                    t.procurement_method.value if t.procurement_method else None
-                ),
-                "status": t.status.value if t.status else None,
-                "submission_deadline": (
-                    t.submission_deadline.isoformat() if t.submission_deadline else None
-                ),
-                "created_at": t.created_at.isoformat(),
-                "risk_level": t.risk_score.risk_level.value if t.risk_score else None,
-                "total_risk_score": t.risk_score.total_score if t.risk_score else None,
-                "flag_count": len(t.red_flags) if t.red_flags else 0,
-                "bid_count": len(t.bids) if t.bids else 0,
-                "is_flagged": bool(t.red_flags),
-            }
+    # ── Data fetch ─────────────────────────────────────────────────────────────
+    data_query = (
+        base_query.options(
+            joinedload(Tender.entity),
+            selectinload(Tender.risk_score),
+            selectinload(Tender.red_flags),
+            selectinload(Tender.bids),
+            selectinload(Tender.documents),
         )
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    tenders = (await db.execute(data_query)).unique().scalars().all()
 
+    # ── Serialisers ────────────────────────────────────────────────────────────
+    def serialize_entity(e) -> dict | None:
+        if not e:
+            return None
+        return {
+            "id": str(e.id),
+            "name": e.name,
+            "type": e.entity_type,
+            "county": e.county,
+            "contact_email": e.contact_email,
+        }
+
+    def serialize_risk_score(rs) -> dict | None:
+        if not rs:
+            return None
+        return {
+            "id": str(rs.id),
+            "total_score": rs.total_score,
+            "risk_level": rs.risk_level.value if rs.risk_level else None,
+            "price_score": rs.price_score,
+            "supplier_score": rs.supplier_score,
+            "spec_score": rs.spec_score,
+            "collusion_score": rs.collusion_score,
+            "ai_analysis": rs.ai_analysis,
+            "computed_at": rs.computed_at.isoformat() if rs.computed_at else None,
+        }
+
+    def serialize_red_flag(rf) -> dict:
+        return {
+            "id": str(rf.id),
+            "flag_type": rf.flag_type,
+            "severity": rf.severity,
+            "description": rf.description,
+            "evidence": rf.evidence,
+            "created_at": rf.created_at.isoformat(),
+        }
+
+    def serialize_bid(b) -> dict:
+        return {
+            "id": str(b.id),
+            "supplier_name": b.supplier_name,
+            "amount": b.amount,
+            "currency": b.currency,
+            "status": b.status,
+            "is_winner": b.is_winner,
+            "submitted_at": b.submitted_at.isoformat() if b.submitted_at else None,
+        }
+
+    def serialize_document(d) -> dict:
+        return {
+            "id": str(d.id),
+            "title": d.title,
+            "document_type": d.document_type,
+            "file_url": d.file_url,
+            "file_size": d.file_size,
+            "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
+        }
+
+    # ── Build response items ───────────────────────────────────────────────────
+    items = [
+        {
+            "id": str(t.id),
+            "reference_number": t.reference_number,
+            "title": t.title,
+            "description": t.description,
+            "category": t.category,
+            "county": t.county,
+            "estimated_value": t.estimated_value,
+            "currency": t.currency,
+            "procurement_method": t.procurement_method,
+            "status": t.status,
+            "submission_deadline": (
+                t.submission_deadline.isoformat() if t.submission_deadline else None
+            ),
+            "opening_date": t.opening_date.isoformat() if t.opening_date else None,
+            "created_at": t.created_at.isoformat(),
+            "updated_at": t.updated_at.isoformat(),
+            "source_url": t.source_url,
+            "source": t.source,
+            "entity": serialize_entity(t.entity),
+            "risk_score": serialize_risk_score(t.risk_score),
+            "red_flags": [serialize_red_flag(rf) for rf in t.red_flags],
+            "bids": [serialize_bid(b) for b in t.bids],
+            "documents": [serialize_document(d) for d in t.documents],
+        }
+        for t in tenders
+    ]
     return {
         "items": items,
         "total": total,
@@ -182,10 +259,8 @@ async def get_tender(tender_id: UUID, db: AsyncSession = Depends(get_db)):
         "estimated_value": tender.estimated_value,
         "currency": tender.currency or "KES",
         "county": tender.county,
-        "procurement_method": (
-            tender.procurement_method.value if tender.procurement_method else None
-        ),
-        "status": tender.status.value if tender.status else None,
+        "procurement_method": tender.procurement_method,
+        "status": tender.status,
         "submission_deadline": (
             tender.submission_deadline.isoformat()
             if tender.submission_deadline
@@ -358,10 +433,8 @@ async def get_investigation_package(
             "description": tender.description,
             "estimated_value": tender.estimated_value,
             "county": tender.county,
-            "procurement_method": (
-                tender.procurement_method.value if tender.procurement_method else None
-            ),
-            "status": tender.status.value if tender.status else None,
+            "procurement_method": tender.procurement_method,
+            "status": tender.status,
             "reference_number": tender.reference_number,
         },
         risk_score={

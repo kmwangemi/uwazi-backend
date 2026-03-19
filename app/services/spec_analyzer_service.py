@@ -129,7 +129,7 @@ def analyze_specs_keywords(spec_text: str) -> dict:
     }
 
 
-def compute_spec_score(
+async def compute_spec_score(
     spec_text: Optional[str], use_ai: bool = False, tender_value: Optional[float] = None
 ) -> dict:
     """
@@ -147,7 +147,7 @@ def compute_spec_score(
         try:
             from app.services.ai_service import analyze_tender_specifications
 
-            ai_result = analyze_tender_specifications(spec_text, tender_value)
+            ai_result = await analyze_tender_specifications(spec_text, tender_value)
             # Use AI score if higher than keyword score
             ai_score = ai_result.get("restrictiveness_score", 0)
             final_score = max(keyword_result["score"], ai_score)

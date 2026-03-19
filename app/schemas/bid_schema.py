@@ -14,6 +14,10 @@ class BidCreate(BaseModel):
     proposal_text: Optional[str] = None
 
 
+class BidUpdate(BaseModel):
+    pass
+
+
 class BidOut(BidCreate):
     id: UUID
     is_winner: bool
@@ -22,3 +26,7 @@ class BidOut(BidCreate):
 
     class Config:
         from_attributes = True
+
+
+class BidResponse(BaseModel):
+    pass

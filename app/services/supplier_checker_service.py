@@ -41,21 +41,17 @@ def compute_supplier_score(supplier: Supplier) -> dict:
         score += 15
         flags.append("HIGH: Minimal tax filing history")
 
-    # 3. Director complexity — directors managing many companies = shell network signal
+    # 3. PEP directors — politically exposed persons are a strong corruption signal
     directors = supplier.directors or []
-    for director in directors:
-        other_companies = director.get("other_companies", [])
-        if len(other_companies) > 20:
-            score += 20
-            flags.append(
-                f"HIGH: Director '{director.get('name', 'Unknown')}' linked to "
-                f"{len(other_companies)} other companies — possible shell network"
-            )
-            break
-        elif len(other_companies) > 10:
-            score += 10
-            flags.append(f"MEDIUM: Director linked to {len(other_companies)} companies")
-            break
+    pep_directors = [
+        d for d in directors if getattr(d, "is_politically_exposed", False)
+    ]
+    if pep_directors:
+        score += 20
+        names = ", ".join(d.full_name for d in pep_directors)
+        flags.append(
+            f"HIGH: {len(pep_directors)} politically exposed director(s): {names}"
+        )
 
     # 4. Physical address
     if supplier.has_physical_address is False:
@@ -87,14 +83,18 @@ def compute_supplier_score_from_data(supplier_data: dict) -> dict:
     Scorecard from raw dict (for cases where full ORM object isn't available).
     """
 
-    # Create a lightweight mock
     class MockSupplier:
         pass
+
+    class MockDirector:
+        def __init__(self, d: dict):
+            self.full_name = d.get("full_name", "Unknown")
+            self.is_politically_exposed = d.get("is_politically_exposed", False)
 
     s = MockSupplier()
     s.company_age_days = supplier_data.get("company_age_days")
     s.tax_filings_count = supplier_data.get("tax_filings_count", 0)
-    s.directors = supplier_data.get("directors", [])
+    s.directors = [MockDirector(d) for d in supplier_data.get("directors", [])]
     s.has_physical_address = supplier_data.get("has_physical_address")
     s.has_online_presence = supplier_data.get("has_online_presence")
     s.past_contracts_count = supplier_data.get("past_contracts_count", 0)

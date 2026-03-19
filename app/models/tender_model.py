@@ -7,7 +7,7 @@ Tender model — the core procurement entity in the system.
 from __future__ import annotations
 
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, DateTime, Float, Index, String, Text
@@ -20,6 +20,7 @@ from app.enums import TenderStatus
 if TYPE_CHECKING:
     from app.models.bid_model import Bid
     from app.models.contract_model import Contract
+    from app.models.investigation_model import Investigation
     from app.models.procuring_entity_model import ProcuringEntity
     from app.models.red_flag_model import RedFlag
     from app.models.risk_score_model import RiskScore
@@ -184,6 +185,12 @@ class Tender(Base):
         lazy="select",
     )
     alerts = relationship("Alert", back_populates="tender", lazy="selectin")
+    investigations: Mapped[List["Investigation"]] = relationship(
+        "Investigation",
+        back_populates="tender",  # or lazy="select" without back_populates if you prefer
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
 
     # ── Composite indexes ──────────────────────────────────────────────────────
     __table_args__ = (

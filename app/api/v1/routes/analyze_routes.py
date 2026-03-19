@@ -8,8 +8,8 @@ Risk Analysis Routes
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, Query
-from sqlalchemy import desc, func
-from sqlalchemy.orm import Session
+from sqlalchemy import desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.enums import RiskLevel
@@ -19,38 +19,21 @@ from app.models.tender_model import Tender
 router = APIRouter(prefix="/analyze", tags=["Risk Analysis"])
 
 
-# ── POST /api/analyze/price-check ────────────────────────────────────────────
+# ── POST /api/analyze/price-check ─────────────────────────────────────────────
 
 
 @router.post("/price-check")
-def check_price(
+async def check_price(
     item_name: str = Body(..., embed=True, description="Item/tender description"),
     tender_price: float = Body(..., embed=True, description="Estimated price in KES"),
     category: Optional[str] = Body(None, embed=True),
     county: Optional[str] = Body(None, embed=True),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Compare a price against market benchmarks.
-
-    Returns:
-    {
-        score: float,              risk score 0-100
-        risk_level: str,           low/medium/high/critical
-        deviation_pct: float,      % above/below market
-        benchmark: {               null if no match found
-            item_name, category, unit,
-            avg_price, min_price, max_price, source
-        },
-        flags: [str],              human-readable issues
-        verdict: str               plain English summary
-    }
-    """
     from app.services.price_analyzer_service import compute_price_score
 
-    result = compute_price_score(db, tender_price, category or "", item_name)
+    result = await compute_price_score(db, tender_price, category or "", item_name)
 
-    # Shape response to match frontend type PriceCheckResult
     benchmark = result.get("benchmark_comparison")
     score = result.get("score", 0)
 
@@ -65,7 +48,6 @@ def check_price(
 
     deviation_pct = benchmark["deviation_pct"] if benchmark else 0.0
 
-    # Plain English verdict
     if not benchmark:
         verdict = f"No benchmark data available for '{item_name}'. Cannot assess price."
     elif deviation_pct > 100:
@@ -91,13 +73,19 @@ def check_price(
         "deviation_pct": round(deviation_pct, 2),
         "benchmark": (
             {
-                "item_name": benchmark["item_name"],
-                "category": benchmark["category"],
+                "item_name": benchmark[
+                    "item"
+                ],  # ← service returns "item" not "item_name"
+                "category": category or "",  # ← not in service, use request param
                 "unit": benchmark.get("unit", ""),
                 "avg_price": benchmark["market_avg"],
-                "min_price": benchmark["market_min"],
-                "max_price": benchmark["market_max"],
-                "source": benchmark.get("source", "PPIP / Kenya Treasury"),
+                "min_price": benchmark[
+                    "market_avg"
+                ],  # ← no min in service, fallback to avg
+                "max_price": benchmark[
+                    "market_avg"
+                ],  # ← no max in service, fallback to avg
+                "source": "PPIP / Kenya Treasury",
             }
             if benchmark
             else None
@@ -109,35 +97,23 @@ def check_price(
     }
 
 
-# ── POST /api/analyze/specifications ─────────────────────────────────────────
+# ── POST /api/analyze/specifications ──────────────────────────────────────────
 
 
 @router.post("/specifications")
-def analyze_specifications(
+async def analyze_specifications(
     spec_text: str = Body(
         ..., embed=True, description="Full specification text to analyse"
     ),
     tender_value: Optional[float] = Body(None, embed=True),
     use_ai: bool = Body(False, embed=True, description="Use Claude for deep analysis"),
 ):
-    """
-    Analyse tender specification text for restrictive or anti-competitive patterns.
-
-    Returns:
-    {
-        restrictiveness_score: float  0-100
-        risk_level: str
-        issues: [{type, description, severity, excerpt}]
-        brand_names_found: [str]
-        single_source_detected: bool
-        verdict: str
-        ai_analysis: str | null      (only if use_ai=true)
-    }
-    """
     from app.services.spec_analyzer_service import compute_spec_score
 
     # Rule-based analysis
-    rule_result = compute_spec_score(spec_text, use_ai=False, tender_value=tender_value)
+    rule_result = await compute_spec_score(
+        spec_text, use_ai=False, tender_value=tender_value
+    )
     score = rule_result.get("score", 0)
 
     # spaCy NER enhancement
@@ -158,7 +134,6 @@ def analyze_specifications(
     # Merge issues
     all_issues = []
     for flag in rule_result.get("flags", []):
-        # Parse "SEVERITY: description" format
         parts = flag.split(":", 1)
         severity = parts[0].strip().lower() if len(parts) == 2 else "medium"
         description = parts[1].strip() if len(parts) == 2 else flag
@@ -198,7 +173,7 @@ def analyze_specifications(
         try:
             from app.services.ai_service import analyze_tender_specifications
 
-            ai_r = analyze_tender_specifications(spec_text, tender_value)
+            ai_r = await analyze_tender_specifications(spec_text, tender_value)
             ai_analysis = ai_r.get("analysis") or str(ai_r)
             ai_score = ai_r.get("restrictiveness_score", score)
             score = max(score, ai_score)
@@ -236,32 +211,17 @@ def analyze_specifications(
     }
 
 
-# ── GET /api/analyze/county-risk ─────────────────────────────────────────────
+# ── GET /api/analyze/county-risk ──────────────────────────────────────────────
 
 
 @router.get("/county-risk")
-def get_county_risk_overview(
+async def get_county_risk_overview(
     limit: int = Query(47, ge=1, le=47, description="Number of counties to return"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    County-level risk overview table.
-    Used on the /risk page county risk section.
-
-    Returns list of counties sorted by avg_risk_score desc:
-    [{
-        county: str,
-        tender_count: int,
-        avg_risk_score: float,
-        total_value_kes: float,
-        critical_count: int,
-        high_count: int,
-        highest_risk_tender: { id, title, total_score } | null
-    }]
-    """
     # Aggregate risk data by county
-    rows = (
-        db.query(
+    rows_result = await db.execute(
+        select(
             Tender.county,
             func.count(Tender.id).label("tender_count"),
             func.avg(RiskScore.total_score).label("avg_risk"),
@@ -272,15 +232,15 @@ def get_county_risk_overview(
         .group_by(Tender.county)
         .order_by(desc("avg_risk"))
         .limit(limit)
-        .all()
     )
+    rows = rows_result.all()
 
     if not rows:
         return []
 
-    # Get critical/high counts per county
-    level_counts = (
-        db.query(
+    # Critical/high counts per county
+    level_counts_result = await db.execute(
+        select(
             Tender.county,
             RiskScore.risk_level,
             func.count(RiskScore.id).label("cnt"),
@@ -291,11 +251,9 @@ def get_county_risk_overview(
             RiskScore.risk_level.in_([RiskLevel.CRITICAL, RiskLevel.HIGH]),
         )
         .group_by(Tender.county, RiskScore.risk_level)
-        .all()
     )
-
     level_map: dict = {}
-    for county, level, cnt in level_counts:
+    for county, level, cnt in level_counts_result.all():
         if county not in level_map:
             level_map[county] = {"critical": 0, "high": 0}
         level_map[county][level.value] = cnt
@@ -304,12 +262,14 @@ def get_county_risk_overview(
     highest: dict = {}
     for county, _, _, _ in rows:
         top = (
-            db.query(Tender, RiskScore)
-            .join(RiskScore, RiskScore.tender_id == Tender.id)
-            .filter(Tender.county == county)
-            .order_by(desc(RiskScore.total_score))
-            .first()
-        )
+            await db.execute(
+                select(Tender, RiskScore)
+                .join(RiskScore, RiskScore.tender_id == Tender.id)
+                .filter(Tender.county == county)
+                .order_by(desc(RiskScore.total_score))
+                .limit(1)
+            )
+        ).first()
         if top:
             t, rs = top
             highest[county] = {

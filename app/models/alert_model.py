@@ -1,5 +1,5 @@
 import uuid
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime

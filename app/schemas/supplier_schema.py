@@ -23,6 +23,10 @@ class SupplierCreate(SupplierBase):
     pass
 
 
+class SupplierUpdate(SupplierBase):
+    pass
+
+
 class SupplierOut(SupplierBase):
     id: UUID
     company_age_days: Optional[int]
