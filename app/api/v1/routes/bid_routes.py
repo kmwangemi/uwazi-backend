@@ -99,7 +99,7 @@ async def update_bid(
     db: DbDependency,
     current_user=Depends(get_current_user),
 ):
-    return await bid_service.update_bid(db, bid_id, bid_data)
+    return await bid_service.update_bid(db, bid_id, bid_data, updated_by=current_user.id)
 
 
 @bid_router.delete("/bids/{bid_id}", status_code=status.HTTP_204_NO_CONTENT)

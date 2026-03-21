@@ -7,6 +7,8 @@ POST /api/v1/auth/logout
 PATCH /api/v1/auth/password
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,22 +67,22 @@ def _set_auth_cookies(
 ):
     is_prod = settings.ENVIRONMENT == "production"
 
-    base_cookie = dict(
-        secure=True,  # always True — required for samesite=none
-        samesite="none",  # required for cross-origin (Vercel → your API)
-        httponly=True,
-        path="/",  # consistent path for all cookies
-    )
     response.set_cookie(
         key="auth_token",
         value=access_token,
-        **base_cookie,
+        secure=True,
+        samesite="none",
+        httponly=True,
+        path="/",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        **base_cookie,
+        secure=True,
+        samesite="none",
+        httponly=True,
+        path="/",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
     )
     response.set_cookie(
@@ -96,9 +98,9 @@ def _set_auth_cookies(
 
 @auth_router.post("/login", response_model=AuthUserResponse, summary="Login")
 async def login(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
     ip = request.client.host if request and request.client else None

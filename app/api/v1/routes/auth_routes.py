@@ -7,6 +7,8 @@ POST /api/v1/auth/logout
 PATCH /api/v1/auth/password
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,8 +31,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/login", response_model=LoginResponse, summary="Login with email + password"
 )
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
     """

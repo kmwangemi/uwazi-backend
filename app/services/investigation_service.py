@@ -8,8 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import get_logger
+from app.enums import AuditAction
 from app.models.investigation_model import Investigation
 from app.models.whistleblower_report_model import WhistleblowerReport
+from app.services.audit_service import AuditService
 
 logger = get_logger(__name__)
 
@@ -78,6 +80,7 @@ async def create_investigation(
     risk_level: Optional[str],
     findings: Optional[str],
     investigator_name: Optional[str],
+    created_by: Optional[uuid.UUID] = None,
 ) -> Investigation:
     try:
         investigation = Investigation(
@@ -91,6 +94,14 @@ async def create_investigation(
         db.add(investigation)
         await db.commit()
         await db.refresh(investigation)
+        if created_by:
+            await AuditService.log(
+                db,
+                AuditAction.CASE_CREATED,
+                user_id=created_by,
+                entity_type="Investigation",
+                entity_id=investigation.id,
+            )
         return investigation
     except SQLAlchemyError as e:
         await db.rollback()
@@ -107,6 +118,7 @@ async def update_investigation(
     status: Optional[str] = None,
     findings: Optional[str] = None,
     investigator_name: Optional[str] = None,
+    updated_by: Optional[uuid.UUID] = None,
 ) -> Investigation:
     try:
         investigation = await get_investigation_by_id(db, investigation_id)
@@ -120,6 +132,15 @@ async def update_investigation(
             investigation.investigator_name = investigator_name
         await db.commit()
         await db.refresh(investigation)
+        if updated_by:
+            action = AuditAction.CASE_CLOSED if status == "closed" else AuditAction.CASE_STATUS_UPDATED
+            await AuditService.log(
+                db,
+                action,
+                user_id=updated_by,
+                entity_type="Investigation",
+                entity_id=investigation.id,
+            )
         return investigation
     except HTTPException:
         raise
@@ -208,6 +229,13 @@ async def mark_report_reviewed(
         report.is_credible = is_credible
         await db.commit()
         await db.refresh(report)
+        await AuditService.log(
+            db,
+            AuditAction.CASE_NOTE_ADDED,
+            user_id=reviewer_id,
+            entity_type="WhistleblowerReport",
+            entity_id=report.id,
+        )
         return report
     except HTTPException:
         raise

@@ -233,21 +233,21 @@ async def get_spending_forecast(
     db: AsyncSession = Depends(get_db),
     user=Depends(require_role("admin", "investigator")),
 ):
-    result = await db.execute(
+    entity_result = await db.execute(
         select(ProcuringEntity).filter(ProcuringEntity.id == entity_id)
     )
-    entity = result.scalars().first()
+    entity = entity_result.scalars().first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
 
     from app.models.tender_model import Tender
 
-    result = await db.execute(
+    contract_result = await db.execute(
         select(Contract)
         .join(Tender)
         .filter(Tender.entity_id == entity_id, Contract.awarded_at.isnot(None))
     )
-    contracts = result.scalars().all()
+    contracts = contract_result.scalars().all()
 
     if len(contracts) < 10:
         return {
@@ -265,10 +265,10 @@ async def get_spending_forecast(
 
     from app.ml.spending_forecast import detect_spending_anomalies
 
-    result = detect_spending_anomalies(spend_records, entity_name=entity.name)
-    result["entity_id"] = str(entity_id)
-    result["entity_name"] = entity.name
-    return result
+    anomaly_result = detect_spending_anomalies(spend_records, entity_name=entity.name)
+    anomaly_result["entity_id"] = str(entity_id)
+    anomaly_result["entity_name"] = entity.name
+    return anomaly_result
 
 
 # ── Collusion analysis ─────────────────────────────────────────────────────────

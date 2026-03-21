@@ -14,15 +14,18 @@ PIPELINE (per tender)
 
 from datetime import datetime, timezone
 from typing import Optional
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RiskLevel
+from app.enums import AuditAction
 from app.models.red_flag_model import RedFlag
 from app.models.risk_score_model import RiskScore
 from app.models.supplier_model import Supplier
 from app.models.tender_model import Tender
+from app.services.audit_service import AuditService
 from app.services.price_analyzer_service import compute_price_score
 
 
@@ -52,6 +55,7 @@ async def compute_and_save_risk(
     supplier: Optional[Supplier] = None,
     bids: Optional[list] = None,
     use_ai: bool = True,
+    user_id: Optional[uuid.UUID] = None,
 ) -> RiskScore:
     """Full ML + AI risk pipeline. Saves and returns RiskScore."""
     all_flags = []
@@ -278,8 +282,9 @@ async def compute_and_save_risk(
         )
         db.add(rso)
 
+    from sqlalchemy import delete
     # Save red flags
-    await db.execute(RedFlag.__table__.delete().where(RedFlag.tender_id == tender.id))
+    await db.execute(delete(RedFlag).where(RedFlag.tender_id == tender.id))
     sev = {
         "CRITICAL": "critical",
         "HIGH": "high",
@@ -318,4 +323,12 @@ async def compute_and_save_risk(
 
     await db.commit()
     await db.refresh(rso)
+    if user_id:
+        await AuditService.log(
+            db,
+            AuditAction.TENDER_SCORED,
+            user_id=user_id,
+            entity_type="Tender",
+            entity_id=tender.id,
+        )
     return rso

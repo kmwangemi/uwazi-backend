@@ -9,10 +9,11 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.logger import get_logger
-from app.enums import RiskLevel, TenderStatus
+from app.enums import AuditAction, RiskLevel, TenderStatus
 from app.models.risk_score_model import RiskScore
 from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate, TenderUpdate
+from app.services.audit_service import AuditService
 from app.services.entity_service import get_or_create_entity
 
 logger = get_logger(__name__)
@@ -35,25 +36,21 @@ async def create_tender(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A tender with this reference number already exists.",
             )
-        # ── Auto-create or fetch procuring entity ─────────────────────────────
-        entity = await get_or_create_entity(
-            db=db,
-            entity_name=tender_data.entity_name,
-            entity_type=tender_data.entity_type or "OTHER",
-            county=tender_data.county,
-        )
         new_tender = Tender(
             **tender_data.model_dump(exclude={"attachments"}),
             created_by=created_by,
             attachments=attachments or [],
-            procuring_entity_id=entity.id,  # link entity
         )
         db.add(new_tender)
-        # ── Update entity stats ───────────────────────────────────────────────
-        entity.total_tenders += 1
-        entity.total_expenditure += tender_data.amount
         await db.commit()
         await db.refresh(new_tender)
+        await AuditService.log(
+            db,
+            AuditAction.TENDER_CREATED,
+            user_id=created_by,
+            entity_type="Tender",
+            entity_id=new_tender.id,
+        )
         return new_tender
     except HTTPException:
         raise
@@ -122,6 +119,7 @@ async def update_tender(
     db: AsyncSession,
     tender_id: uuid.UUID,
     tender_data: TenderUpdate,
+    updated_by: Optional[uuid.UUID] = None,
 ) -> Tender:
     try:
         tender = await get_tender_by_id(db, tender_id)
@@ -130,6 +128,14 @@ async def update_tender(
             setattr(tender, field, value)
         await db.commit()
         await db.refresh(tender)
+        if updated_by:
+            await AuditService.log(
+                db,
+                AuditAction.TENDER_UPDATED,
+                user_id=updated_by,
+                entity_type="Tender",
+                entity_id=tender.id,
+            )
         return tender
     except HTTPException:
         raise
