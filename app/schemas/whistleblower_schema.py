@@ -15,7 +15,7 @@ class WhistleblowerCreate(BaseModel):
     contact_preference: Optional[str] = "none"  # collected but not stored
 
     def get_report_text(self) -> str:
-        return self.report_text or self.description or ""
+        return self.description
 
 
 class WhistleblowerOut(BaseModel):

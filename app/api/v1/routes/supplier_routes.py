@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import require_role
+from app.core.dependencies import get_current_user, require_role
+from app.models.user_model import User
 from app.models.supplier_model import Supplier
 from app.schemas.supplier_schema import SupplierCreate
 from app.services.supplier_checker_service import compute_supplier_score
@@ -99,6 +100,7 @@ async def list_suppliers_route(
     min_risk_score: Optional[float] = Query(None),
     risk_level: Optional[str] = Query(None, description="low|medium|high|critical"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     suppliers, total = await list_suppliers(
         db,
@@ -147,6 +149,7 @@ async def list_suppliers_route(
 async def get_supplier_route(
     supplier_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     supplier = await get_supplier_by_id(db, supplier_id)
     red_flags = await get_supplier_red_flags(db, supplier_id)
@@ -185,7 +188,7 @@ async def get_supplier_route(
         "directors": [serialize_director(d) for d in (supplier.directors or [])],
         "contracts_won": len(supplier.contracts) if supplier.contracts else 0,
         "total_value_won": (
-            sum(c.value or 0 for c in supplier.contracts) if supplier.contracts else 0
+            sum(c.contract_value or 0 for c in supplier.contracts) if supplier.contracts else 0
         ),
         "contracts": [serialize_contract(c) for c in (supplier.contracts or [])],
         "red_flags": [serialize_red_flag(rf) for rf in red_flags],

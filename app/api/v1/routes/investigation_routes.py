@@ -71,6 +71,7 @@ async def list_whistleblower_reports_route(
     is_reviewed: Optional[bool] = None,
     urgency: Optional[str] = Query(None, description="critical|high|medium|low"),
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_role("admin", "investigator")),
 ):
     reports, total = await list_whistleblower_reports(
         db,
@@ -133,6 +134,7 @@ async def list_investigations_route(
     status: Optional[str] = Query(None, description="open|in_review|escalated|closed"),
     risk_level: Optional[str] = Query(None, description="critical|high|medium|low"),
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_role("admin", "investigator")),
 ):
     investigations, total = await list_investigations(
         db,
@@ -174,6 +176,7 @@ async def create_investigation_route(
         risk_level=payload.risk_level,
         findings=payload.findings,
         investigator_name=payload.investigator_name,
+        created_by=user.id,
     )
     return serialize_investigation(inv)
 
@@ -189,6 +192,7 @@ class UpdateInvestigationRequest(BaseModel):
 async def get_investigation_route(
     investigation_id: UUID,
     db: AsyncSession = Depends(get_db),
+    user=Depends(require_role("admin", "investigator")),
 ):
     inv = await get_investigation_by_id(db, investigation_id)
     return serialize_investigation(inv)
@@ -207,5 +211,6 @@ async def update_investigation_route(
         status=payload.status,
         findings=payload.findings,
         investigator_name=payload.investigator_name,
+        updated_by=user.id,
     )
     return serialize_investigation(inv)

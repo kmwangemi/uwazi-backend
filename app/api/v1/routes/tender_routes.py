@@ -9,12 +9,14 @@ from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.database import get_db
-from app.core.dependencies import require_role
+from app.core.dependencies import get_current_user, require_role
+from app.models.user_model import User
 from app.models.risk_score_model import RiskScore
 from app.models.supplier_model import Supplier
 from app.models.tender_model import Tender
 from app.schemas.tender_schema import TenderCreate
 from app.services.risk_engine_service import compute_and_save_risk
+from app.services.tender_service import create_tender as create_tender_service
 
 router = APIRouter(prefix="/tenders", tags=["Tenders"])
 
@@ -38,8 +40,9 @@ async def list_tenders(
     sort_order: Optional[str] = Query("desc", description="asc | desc"),
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List tenders with filters, sorting, and pagination. Public endpoint."""
+    """List tenders with filters, sorting, and pagination. Protected endpoint."""
 
     base_query = select(Tender)
 
@@ -100,7 +103,7 @@ async def list_tenders(
 
     # ── Count (clean, before pagination + load options) ────────────────────────
     count_query = select(count()).select_from(base_query.subquery())
-    total = (await db.execute(count_query)).scalar()
+    total = (await db.execute(count_query)).scalar() or 0
 
     # ── Data fetch ─────────────────────────────────────────────────────────────
     data_query = (
@@ -213,8 +216,12 @@ async def list_tenders(
 
 
 @router.get("/{tender_id}", response_model=dict)
-async def get_tender(tender_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Full tender detail with risk score, red flags, bids, and entity. Public."""
+async def get_tender(
+    tender_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full tender detail with risk score, red flags, bids, and entity."""
     result = await db.execute(
         select(Tender)
         .options(
@@ -281,7 +288,7 @@ async def get_tender(tender_id: UUID, db: AsyncSession = Depends(get_db)):
         "risk_score": (
             {
                 "total_score": tender.risk_score.total_score,
-                "risk_level": tender.risk_score.risk_level.value,
+                "risk_level": tender.risk_score.risk_level.value if hasattr(tender.risk_score.risk_level, "value") else tender.risk_score.risk_level,
                 "price_score": tender.risk_score.price_score,
                 "supplier_score": tender.risk_score.supplier_score,
                 "spec_score": tender.risk_score.spec_score,
@@ -330,10 +337,7 @@ async def create_tender(
     user=Depends(require_role("admin", "investigator")),
 ):
     """Create a tender manually."""
-    tender = Tender(**payload.model_dump())
-    db.add(tender)
-    await db.commit()
-    await db.refresh(tender)
+    tender = await create_tender_service(db, payload, created_by=user.id)
     background_tasks.add_task(_run_risk_in_background, tender.id)
     return {"id": str(tender.id), "message": "Tender created. Risk analysis queued."}
 
@@ -374,13 +378,13 @@ async def trigger_risk_analysis(
         supplier = supplier_result.scalar_one_or_none()
 
     risk_score = await compute_and_save_risk(
-        db, tender, supplier, list(tender.bids or []), use_ai=use_ai
+        db, tender, supplier, list(tender.bids or []), use_ai=use_ai, user_id=user.id
     )
 
     return {
         "tender_id": str(tender_id),
         "total_score": risk_score.total_score,
-        "risk_level": risk_score.risk_level.value,
+        "risk_level": risk_score.risk_level.value if hasattr(risk_score.risk_level, "value") else risk_score.risk_level,
         "price_score": risk_score.price_score,
         "supplier_score": risk_score.supplier_score,
         "spec_score": risk_score.spec_score,
@@ -439,7 +443,7 @@ async def get_investigation_package(
         },
         risk_score={
             "total_score": tender.risk_score.total_score,
-            "risk_level": tender.risk_score.risk_level.value,
+            "risk_level": tender.risk_score.risk_level.value if hasattr(tender.risk_score.risk_level, "value") else tender.risk_score.risk_level,
             "price_score": tender.risk_score.price_score,
             "supplier_score": tender.risk_score.supplier_score,
             "spec_score": tender.risk_score.spec_score,

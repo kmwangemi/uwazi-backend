@@ -12,6 +12,8 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user, require_role
+from app.models.user_model import User
 from app.enums import RiskLevel
 from app.models.risk_score_model import RiskScore
 from app.models.tender_model import Tender
@@ -29,6 +31,7 @@ async def check_price(
     category: Optional[str] = Body(None, embed=True),
     county: Optional[str] = Body(None, embed=True),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin", "investigator")),
 ):
     from app.services.price_analyzer_service import compute_price_score
 
@@ -107,6 +110,7 @@ async def analyze_specifications(
     ),
     tender_value: Optional[float] = Body(None, embed=True),
     use_ai: bool = Body(False, embed=True, description="Use Claude for deep analysis"),
+    user: User = Depends(require_role("admin", "investigator")),
 ):
     from app.services.spec_analyzer_service import compute_spec_score
 
@@ -117,7 +121,7 @@ async def analyze_specifications(
     score = rule_result.get("score", 0)
 
     # spaCy NER enhancement
-    spacy_result = {
+    spacy_result: dict = {
         "restrictiveness_score": 0,
         "issues": [],
         "brand_names_found": [],
@@ -218,6 +222,7 @@ async def analyze_specifications(
 async def get_county_risk_overview(
     limit: int = Query(47, ge=1, le=47, description="Number of counties to return"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     # Aggregate risk data by county
     rows_result = await db.execute(

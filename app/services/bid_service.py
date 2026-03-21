@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.logger import get_logger
+from app.enums import AuditAction
 from app.models.bid_model import Bid
 from app.models.tender_model import Tender
 from app.schemas.bid_schema import BidCreate, BidUpdate
+from app.services.audit_service import AuditService
 
 logger = get_logger(__name__)
 
@@ -63,6 +65,13 @@ async def create_bid(
         db.add(new_bid)
         await db.commit()
         await db.refresh(new_bid)
+        await AuditService.log(
+            db,
+            AuditAction.BID_SUBMITTED,
+            user_id=submitted_by,
+            entity_type="Bid",
+            entity_id=new_bid.id,
+        )
         return new_bid
     except HTTPException:
         raise
@@ -122,6 +131,7 @@ async def update_bid(
     db: AsyncSession,
     bid_id: uuid.UUID,
     bid_data: BidUpdate,
+    updated_by: Optional[uuid.UUID] = None,
 ) -> Bid:
     try:
         bid = await get_bid_by_id(db, bid_id)
@@ -130,6 +140,14 @@ async def update_bid(
             setattr(bid, field, value)
         await db.commit()
         await db.refresh(bid)
+        if updated_by:
+            await AuditService.log(
+                db,
+                AuditAction.BID_UPDATED,
+                user_id=updated_by,
+                entity_type="Bid",
+                entity_id=bid.id,
+            )
         return bid
     except HTTPException:
         raise

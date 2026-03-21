@@ -143,4 +143,4 @@ class PaginationParams:
 # ── Convenience type aliases (defined after functions to avoid forward refs) ──
 
 DBSession = Annotated[AsyncSession, Depends(get_db)]
-CurrentUser = Annotated[UserResponse, Depends(get_current_user)]
+CurrentUser = Annotated[User, Depends(get_current_user)]

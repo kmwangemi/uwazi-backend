@@ -276,7 +276,7 @@ def analyse(spec_text: str, tender_value: Optional[float] = None) -> dict:
 
         # Only count each label type once toward the score (avoid stacking)
         if ent.label_ not in seen_labels:
-            total_score += config["score"]
+            total_score += float(config["score"])
             seen_labels.add(ent.label_)
 
         if ent.label_ == "SINGLE_SOURCE":
