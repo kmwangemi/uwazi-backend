@@ -25,11 +25,13 @@ from app.api.v1.routes.dashboard_routes import router as dashboard_router
 from app.api.v1.routes.investigation_routes import router as investigation_router
 from app.api.v1.routes.ml_routes import collusion_router
 from app.api.v1.routes.ml_routes import router as ml_router
+from app.api.v1.routes.user_routes import router as user_router
 
 # from app.api.v1.routes.scraper import router as scraper_router
 from app.api.v1.routes.supplier_routes import router as suppliers_router
 from app.api.v1.routes.tender_routes import router as tenders_router
 from app.api.v1.routes.whistleblower_routes import router as whistleblower_router
+from app.api.v1.routes.log_routes import router as logs_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.middleware.logger_middleware import RequestLoggingMiddleware
@@ -75,6 +77,7 @@ PREFIX = "/api/v1"
 app.include_router(
     auth_router, prefix=PREFIX
 )  # POST /api/auth/login|register|logout  GET /api/auth/me
+app.include_router(user_router, prefix=PREFIX)
 app.include_router(
     tenders_router, prefix=PREFIX
 )  # GET|POST /api/tenders  + /{id} sub-routes
@@ -99,6 +102,7 @@ app.include_router(
 app.include_router(county_risk_router, prefix=PREFIX)
 app.include_router(analytics_router, prefix=PREFIX)
 app.include_router(investigation_router, prefix=PREFIX)
+app.include_router(logs_router, prefix=PREFIX)
 
 
 @app.get("/", tags=["Health"])

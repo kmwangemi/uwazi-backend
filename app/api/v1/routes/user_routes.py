@@ -2,8 +2,8 @@
 Procurement Monitoring System — User & RBAC Routes
 
 Profile  (own account, any authenticated user):
-  GET    /api/v1/users/me              Get own profile
-  PATCH  /api/v1/users/me              Update own name / phone / department
+  GET    /api/v1/users/profile              Get own profile
+  PATCH  /api/v1/users/profile              Update own name / phone / department
 
 User management  (admin, requires manage_users permission):
   GET    /api/v1/users                 List all users (paginated)
@@ -47,7 +47,7 @@ from app.schemas.user_schema import (
 )
 from app.services.user_service import UserService
 
-user_router = APIRouter(tags=["Users & RBAC"])
+router = APIRouter(tags=["Users & RBAC"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -55,7 +55,7 @@ user_router = APIRouter(tags=["Users & RBAC"])
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-@user_router.get(
+@router.get(
     "/users/profile",
     response_model=UserResponse,
     summary="Get my profile",
@@ -79,7 +79,7 @@ async def get_my_profile(
     return await UserService.get_profile(db, current_user)
 
 
-@user_router.patch(
+@router.patch(
     "/users/profile",
     response_model=UserResponse,
     summary="Update my profile",
@@ -107,7 +107,7 @@ async def update_my_profile(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-@user_router.get(
+@router.get(
     "/users",
     response_model=PaginatedResponse[UserListResponse],
     summary="List all users",
@@ -133,7 +133,7 @@ async def list_users(
     )
 
 
-@user_router.post(
+@router.post(
     "/users",
     response_model=UserResponse,
     status_code=201,
@@ -147,7 +147,7 @@ async def create_user(
     return await UserService.create_user(db, data, created_by=current_user)
 
 
-@user_router.post("/register", response_model=UserResponse, status_code=201)
+@router.post("/register", response_model=UserResponse, status_code=201)
 async def register_supplier(
     data: SupplierRegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -155,7 +155,7 @@ async def register_supplier(
     return await UserService.register_supplier(db, data)
 
 
-@user_router.get(
+@router.get(
     "/users/{user_id}",
     response_model=UserResponse,
     summary="Get user by ID",
@@ -168,7 +168,7 @@ async def get_user(
     return await UserService.get_user(db, user_id)
 
 
-@user_router.patch(
+@router.patch(
     "/users/{user_id}",
     response_model=UserResponse,
     summary="Update user (admin)",
@@ -183,7 +183,7 @@ async def update_user(
     return await UserService.update_user(db, user_id, data, updated_by=current_user)
 
 
-@user_router.patch(
+@router.patch(
     "/users/{user_id}/roles",
     response_model=UserResponse,
     summary="Assign roles to user",
@@ -198,7 +198,7 @@ async def assign_roles(
     return await UserService.assign_roles(db, user_id, data, assigned_by=current_user)
 
 
-@user_router.patch(
+@router.patch(
     "/users/{user_id}/deactivate",
     response_model=UserResponse,
     summary="Deactivate a user account",
@@ -217,7 +217,7 @@ async def deactivate_user(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-@user_router.get(
+@router.get(
     "/roles",
     response_model=List[RoleResponse],
     summary="List all roles",
@@ -230,7 +230,7 @@ async def list_roles(
     return [RoleResponse.model_validate(r) for r in roles]
 
 
-@user_router.get(
+@router.get(
     "/permissions",
     response_model=List[PermissionResponse],
     summary="List all permissions",
