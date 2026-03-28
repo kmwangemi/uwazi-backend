@@ -2,8 +2,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+import asyncio
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
+from functools import partial
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
@@ -21,11 +24,11 @@ from app.services.supplier_service import (
 router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
-def _ghost_prob(supplier: Supplier) -> float:
+async def _ghost_prob(supplier: Supplier) -> float:
     try:
         from app.ml.supplier_risk import predict as ml_supplier
 
-        r = ml_supplier(
+        kwargs = dict(
             company_age_days=supplier.company_age_days,
             tax_filings_count=supplier.tax_filings_count,
             directors=supplier.directors or [],
@@ -34,6 +37,7 @@ def _ghost_prob(supplier: Supplier) -> float:
             past_contracts_count=supplier.past_contracts_count,
             past_contracts_value=supplier.past_contracts_value,
         )
+        r = await run_in_threadpool(partial(ml_supplier, **kwargs))
         return round(r.get("ghost_probability") or r["combined_score"] / 100, 4)
     except Exception:
         return round(min((supplier.risk_score or 0) / 100, 1.0), 4)
@@ -114,6 +118,8 @@ async def list_suppliers_route(
         limit=limit,
     )
 
+    ghost_probs = await asyncio.gather(*[_ghost_prob(s) for s in suppliers])
+
     items = [
         {
             "id": str(s.id),
@@ -124,7 +130,7 @@ async def list_suppliers_route(
             "tax_filings_count": s.tax_filings_count,
             "risk_score": s.risk_score,
             "risk_level": _risk_level(s.risk_score),
-            "ghost_probability": _ghost_prob(s),
+            "ghost_probability": gp,
             "is_verified": s.is_verified,
             "is_blacklisted": s.is_blacklisted,
             "directors": [serialize_director(d) for d in (s.directors or [])],
@@ -133,7 +139,7 @@ async def list_suppliers_route(
                 sum(c.contract_value or 0 for c in s.contracts) if s.contracts else 0
             ),
         }
-        for s in suppliers
+        for s, gp in zip(suppliers, ghost_probs)
     ]
 
     return {
@@ -178,7 +184,7 @@ async def get_supplier_route(
         "past_contracts_value": supplier.past_contracts_value,
         "risk_score": supplier.risk_score,
         "risk_level": _risk_level(supplier.risk_score),
-        "ghost_probability": _ghost_prob(supplier),
+        "ghost_probability": await _ghost_prob(supplier),
         "risk_flags": risk_result["flags"],
         "is_verified": supplier.is_verified,
         "is_blacklisted": supplier.is_blacklisted,

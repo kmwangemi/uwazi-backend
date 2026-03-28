@@ -129,8 +129,9 @@ async def analyze_specifications(
     }
     try:
         from app.ml.spec_nlp import analyse as spacy_analyse
+        from fastapi.concurrency import run_in_threadpool
 
-        spacy_result = spacy_analyse(spec_text, tender_value)
+        spacy_result = await run_in_threadpool(spacy_analyse, spec_text, tender_value)
         score = max(score, spacy_result["restrictiveness_score"])
     except Exception:
         pass
@@ -264,24 +265,35 @@ async def get_county_risk_overview(
         level_map[county][level.value] = cnt
 
     # Highest risk tender per county
+    counties_in_rows = [r[0] for r in rows if r[0]]
     highest: dict = {}
-    for county, _, _, _ in rows:
-        top = (
-            await db.execute(
-                select(Tender, RiskScore)
-                .join(RiskScore, RiskScore.tender_id == Tender.id)
-                .filter(Tender.county == county)
-                .order_by(desc(RiskScore.total_score))
-                .limit(1)
+    if counties_in_rows:
+        subq = (
+            select(
+                Tender.id,
+                Tender.title,
+                Tender.county,
+                RiskScore.total_score,
+                RiskScore.risk_level,
+                func.row_number().over(
+                    partition_by=Tender.county,
+                    order_by=desc(RiskScore.total_score)
+                ).label("rn")
             )
-        ).first()
-        if top:
-            t, rs = top
-            highest[county] = {
-                "id": str(t.id),
-                "title": t.title[:60] + ("..." if len(t.title) > 60 else ""),
-                "total_score": rs.total_score,
-                "risk_level": rs.risk_level.value,
+            .join(RiskScore, RiskScore.tender_id == Tender.id)
+            .filter(Tender.county.in_(counties_in_rows))
+            .subquery()
+        )
+
+        top_tenders_result = await db.execute(
+            select(subq).filter(subq.c.rn == 1)
+        )
+        for r in top_tenders_result.all():
+            highest[r.county] = {
+                "id": str(r.id),
+                "title": r.title[:60] + ("..." if len(r.title) > 60 else ""),
+                "total_score": r.total_score,
+                "risk_level": r.risk_level.value if hasattr(r.risk_level, "value") else r.risk_level,
             }
 
     return [

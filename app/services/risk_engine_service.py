@@ -73,13 +73,18 @@ async def compute_and_save_risk(
     if benchmark and tender.estimated_value:
         try:
             from app.ml.price_anomaly import predict as if_price
+            from fastapi.concurrency import run_in_threadpool
+            from functools import partial
 
-            if_r = if_price(
-                price=tender.estimated_value,
-                benchmark_avg=benchmark["market_avg"],
-                estimated_value=tender.estimated_value,
-                category=tender.category,
-                county=tender.county,
+            if_r = await run_in_threadpool(
+                partial(
+                    if_price,
+                    price=tender.estimated_value,
+                    benchmark_avg=benchmark["market_avg"],
+                    estimated_value=tender.estimated_value,
+                    category=tender.category,
+                    county=tender.county,
+                )
             )
             if if_r["is_anomaly"]:
                 price_score = max(price_score, if_r["confidence"] * 100)
@@ -102,16 +107,21 @@ async def compute_and_save_risk(
 
         try:
             from app.ml.supplier_risk import predict as ml_supplier
+            from fastapi.concurrency import run_in_threadpool
+            from functools import partial
 
-            ml_r = ml_supplier(
-                company_age_days=supplier.company_age_days,
-                tax_filings_count=supplier.tax_filings_count,
-                directors=supplier.directors or [],
-                has_physical_address=supplier.has_physical_address,
-                has_online_presence=supplier.has_online_presence,
-                past_contracts_count=supplier.past_contracts_count,
-                past_contracts_value=supplier.past_contracts_value,
-                employee_count=supplier.employee_count,
+            ml_r = await run_in_threadpool(
+                partial(
+                    ml_supplier,
+                    company_age_days=supplier.company_age_days,
+                    tax_filings_count=supplier.tax_filings_count,
+                    directors=supplier.directors or [],
+                    has_physical_address=supplier.has_physical_address,
+                    has_online_presence=supplier.has_online_presence,
+                    past_contracts_count=supplier.past_contracts_count,
+                    past_contracts_value=supplier.past_contracts_value,
+                    employee_count=supplier.employee_count,
+                )
             )
             ghost_prob = ml_r.get("ghost_probability") or ml_r["combined_score"] / 100
             supplier_score = max(supplier_score, ml_r["combined_score"])
@@ -136,8 +146,9 @@ async def compute_and_save_risk(
 
     try:
         from app.ml.spec_nlp import analyse as spacy_analyse
+        from fastapi.concurrency import run_in_threadpool
 
-        spacy_r = spacy_analyse(tender.description or "", tender.estimated_value)
+        spacy_r = await run_in_threadpool(spacy_analyse, tender.description or "", tender.estimated_value)
         all_flags.extend(spacy_r.get("issues", []))
         spec_score = max(spec_score, spacy_r["restrictiveness_score"])
     except Exception:
@@ -148,6 +159,7 @@ async def compute_and_save_risk(
     if bids and len(bids) >= 2:
         try:
             from app.ml.collusion import detect_bid_collusion
+            from fastapi.concurrency import run_in_threadpool
 
             bids_data = [
                 {
@@ -157,7 +169,7 @@ async def compute_and_save_risk(
                 }
                 for b in bids
             ]
-            col_r = detect_bid_collusion(bids_data, tender.description)
+            col_r = await run_in_threadpool(detect_bid_collusion, bids_data, tender.description)
             collusion_score = col_r["collusion_risk_score"]
             for pair in col_r.get("collusion_pairs", []):
                 all_flags.append(
@@ -185,19 +197,24 @@ async def compute_and_save_risk(
 
     try:
         from app.ml.xgb_risk_model import predict as xgb_predict
+        from fastapi.concurrency import run_in_threadpool
+        from functools import partial
 
-        xgb_r = xgb_predict(
-            price_deviation_pct=benchmark["deviation_pct"] if benchmark else 0.0,
-            supplier_ghost_prob=ghost_prob,
-            spec_restrictiveness=spec_score,
-            estimated_value=tender.estimated_value or 0,
-            procurement_method=method_str,
-            entity_history_score=(
-                tender.entity.corruption_history_score if tender.entity else 0.0
-            ),
-            deadline_days=_days_to_deadline(tender),
-            bid_count=len(bids) if bids else 1,
-            single_bidder=(len(bids) == 1) if bids else False,
+        xgb_r = await run_in_threadpool(
+            partial(
+                xgb_predict,
+                price_deviation_pct=benchmark["deviation_pct"] if benchmark else 0.0,
+                supplier_ghost_prob=ghost_prob,
+                spec_restrictiveness=spec_score,
+                estimated_value=tender.estimated_value or 0,
+                procurement_method=method_str,
+                entity_history_score=(
+                    tender.entity.corruption_history_score if tender.entity else 0.0
+                ),
+                deadline_days=_days_to_deadline(tender),
+                bid_count=len(bids) if bids else 1,
+                single_bidder=(len(bids) == 1) if bids else False,
+            )
         )
         if xgb_r["model_used"] == "xgboost":
             total_score = xgb_r["risk_score"]
