@@ -7,6 +7,7 @@ from app.models.red_flag_model import RedFlag
 from app.models.risk_score_model import RiskScore
 from app.models.supplier_model import Supplier
 from app.models.tender_model import Tender
+from app.models.investigation_model import Investigation
 
 
 async def get_dashboard_stats(db: AsyncSession) -> dict:
@@ -68,16 +69,14 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     # ── Active investigations (tenders with red flags, still open) ─────────────
     investigations = (
         await db.scalar(
-            select(func.count(func.distinct(RedFlag.tender_id)))
-            .join(Tender, Tender.id == RedFlag.tender_id)
-            .filter(Tender.status == "open")
+            select(func.count(Investigation.id))
+            .filter(Investigation.status == "open")
         )
     ) or 0
     investigations_prev = (
         await db.scalar(
-            select(func.count(func.distinct(RedFlag.tender_id)))
-            .join(Tender, Tender.id == RedFlag.tender_id)
-            .filter(Tender.status == "open", Tender.created_at < start_curr)
+            select(func.count(Investigation.id))
+            .filter(Investigation.status == "open", Investigation.opened_at < start_curr)
         )
     ) or 0
 
