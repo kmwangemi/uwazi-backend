@@ -159,8 +159,8 @@ async def list_tenders(
     def serialize_bid(b) -> dict:
         return {
             "id": str(b.id),
-            "supplier_name": b.supplier_name,
-            "amount": b.amount,
+            "supplier_id": str(b.supplier_id),
+            "amount": b.bid_amount,
             "currency": b.currency,
             "status": b.status,
             "is_winner": b.is_winner,
