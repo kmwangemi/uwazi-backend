@@ -10,6 +10,7 @@ from sqlalchemy.sql.functions import count
 
 from app.core.logger import get_logger
 from app.models.bid_model import Bid
+from app.models.contract_model import Contract
 from app.models.red_flag_model import RedFlag
 from app.models.supplier_model import Supplier
 from app.models.tender_model import Tender
@@ -132,15 +133,21 @@ async def get_supplier_red_flags(
     db: AsyncSession,
     supplier_id: uuid.UUID,
 ) -> list[RedFlag]:
-    """Traverse Supplier → Bid → Tender → RedFlag (no direct FK exists)."""
+    """Traverse Supplier → Bid/Contract → Tender → RedFlag."""
     result = await db.execute(
         select(RedFlag)
         .join(Tender, Tender.id == RedFlag.tender_id)
-        .join(Bid, Bid.tender_id == Tender.id)
-        .filter(Bid.supplier_id == supplier_id)
+        .outerjoin(Bid, Bid.tender_id == Tender.id)
+        .outerjoin(Contract, Contract.tender_id == Tender.id)
+        .filter(
+            or_(
+                Bid.supplier_id == supplier_id,
+                Contract.supplier_id == supplier_id
+            )
+        )
         .distinct()
     )
-    return result.scalars().all()
+    return result.unique().scalars().all()
 
 
 async def update_supplier(

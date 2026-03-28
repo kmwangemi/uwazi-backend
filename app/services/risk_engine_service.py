@@ -24,6 +24,7 @@ from app.enums import AuditAction
 from app.models.red_flag_model import RedFlag
 from app.models.risk_score_model import RiskScore
 from app.models.supplier_model import Supplier
+from app.models.investigation_model import Investigation
 from app.models.tender_model import Tender
 from app.services.audit_service import AuditService
 from app.services.price_analyzer_service import compute_price_score
@@ -342,12 +343,54 @@ async def compute_and_save_risk(
 
     await db.commit()
     await db.refresh(rso)
+    
+    # ── Step 8: Auto-create Investigation if HIGH or CRITICAL ─────────────────
+    if risk_level in [RiskLevel.CRITICAL, RiskLevel.HIGH]:
+        existing_inv = (
+            await db.execute(select(Investigation).filter(Investigation.tender_id == tender.id))
+        ).scalars().first()
+        
+        if not existing_inv:
+            inv_title = f"Automatic Investigation: {tender.title}"
+            findings_text = ai_analysis if ai_analysis else "\n".join(unique_flags)
+            if not findings_text:
+                findings_text = "System flagged this tender for high/critical risk."
+                
+            risk_val = risk_level.value if hasattr(risk_level, "value") else str(risk_level)
+            
+            new_inv = Investigation(
+                tender_id=tender.id,
+                title=inv_title[:999],
+                tender_ref=tender.reference_number,
+                status="open",
+                risk_level=risk_val,
+                findings=findings_text,
+                investigator_name="System Generated",
+            )
+            db.add(new_inv)
+            await db.commit()
+            
+            if user_id:
+                try:
+                    await AuditService.log(
+                        db,
+                        AuditAction.CASE_CREATED if hasattr(AuditAction, "CASE_CREATED") else AuditAction.TENDER_SCORED,
+                        user_id=user_id,
+                        entity_type="Investigation",
+                        entity_id=new_inv.id,
+                    )
+                except Exception:
+                    pass
+
     if user_id:
-        await AuditService.log(
-            db,
-            AuditAction.TENDER_SCORED,
-            user_id=user_id,
-            entity_type="Tender",
-            entity_id=tender.id,
-        )
+        try:
+            await AuditService.log(
+                db,
+                AuditAction.TENDER_SCORED,
+                user_id=user_id,
+                entity_type="Tender",
+                entity_id=tender.id,
+            )
+        except Exception:
+            pass
     return rso
