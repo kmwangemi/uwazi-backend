@@ -137,7 +137,7 @@ async def list_tenders(
         return {
             "id": str(rs.id),
             "total_score": rs.total_score,
-            "risk_level": rs.risk_level.value if rs.risk_level else None,
+            "risk_level": rs.risk_level.value if hasattr(rs.risk_level, "value") else rs.risk_level,
             "price_score": rs.price_score,
             "supplier_score": rs.supplier_score,
             "spec_score": rs.spec_score,
@@ -480,6 +480,8 @@ async def get_investigation_package(
 async def _run_risk_in_background(tender_id: UUID):
     """Background task — uses its own session since request session is closed."""
     from app.core.database import AsyncSessionLocal
+    import logging
+    logger = logging.getLogger(__name__)
 
     async with AsyncSessionLocal() as db:
         try:
@@ -490,8 +492,9 @@ async def _run_risk_in_background(tender_id: UUID):
             )
             tender = result.unique().scalar_one_or_none()
             if tender:
-                await compute_and_save_risk(db, tender, use_ai=True)
+                # Disable AI to prevent unhandled Anthropic API failures
+                await compute_and_save_risk(db, tender, use_ai=False)
             await db.commit()
-        except Exception:
+        except Exception as e:
             await db.rollback()
-            raise
+            logger.error(f"Background risk analysis failed for tender {tender_id}: {e}", exc_info=True)

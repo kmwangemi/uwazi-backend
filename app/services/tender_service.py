@@ -36,12 +36,21 @@ async def create_tender(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A tender with this reference number already exists.",
             )
-        new_tender = Tender(
-            **tender_data.model_dump(exclude={"attachments"}),
-            created_by=created_by,
-            attachments=attachments or [],
-        )
+        new_tender = Tender(**tender_data.model_dump())
         db.add(new_tender)
+        await db.flush()  # get the new_tender.id without committing yet
+        if attachments:
+            from app.models.tender_document_model import TenderDocument
+            for att in attachments:
+                doc = TenderDocument(
+                    tender_id=new_tender.id,
+                    filename=att.get("filename", "document.pdf"),
+                    file_path=att.get("file_path"),
+                    mime_type=att.get("mime_type", "application/pdf"),
+                    doc_type=att.get("doc_type", "tender_notice"),
+                )
+                db.add(doc)
+                
         await db.commit()
         await db.refresh(new_tender)
         await AuditService.log(

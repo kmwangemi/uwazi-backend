@@ -40,7 +40,9 @@ def _risk_level_from_score(score: float) -> RiskLevel:
 
 
 def _method_str(tender: Tender) -> Optional[str]:
-    return tender.procurement_method.value if tender.procurement_method else None
+    if not tender.procurement_method:
+        return None
+    return tender.procurement_method.value if hasattr(tender.procurement_method, "value") else tender.procurement_method
 
 
 def _days_to_deadline(tender: Tender) -> Optional[int]:

@@ -130,6 +130,7 @@ async def list_suppliers_route(
             "tax_filings_count": s.tax_filings_count,
             "risk_score": s.risk_score,
             "risk_level": _risk_level(s.risk_score),
+            "risk_flags": compute_supplier_score(s)["flags"],
             "ghost_probability": gp,
             "is_verified": s.is_verified,
             "is_blacklisted": s.is_blacklisted,
