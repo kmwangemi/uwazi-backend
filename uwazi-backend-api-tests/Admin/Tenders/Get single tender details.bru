@@ -1,0 +1,15 @@
+meta {
+  name: Get single tender details
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{local_url}}/tenders/215af878-07ec-4c69-b1ef-dc00f109b1b5
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{auth_token}}
+}

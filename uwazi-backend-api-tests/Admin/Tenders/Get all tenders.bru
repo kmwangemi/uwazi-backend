@@ -5,14 +5,15 @@ meta {
 }
 
 get {
-  url: {{local_url}}/tenders?page=1&page_size=10
+  url: {{local_url}}/tenders?search=MOH%2FRT%2F2024%2F022&page=1&limit=20
   body: none
   auth: bearer
 }
 
 params:query {
+  search: MOH%2FRT%2F2024%2F022
   page: 1
-  page_size: 10
+  limit: 20
 }
 
 auth:bearer {
