@@ -150,8 +150,9 @@ async def train_supplier_rf(db) -> dict:
     ]
 
     from app.ml.supplier_risk import train
+    from fastapi.concurrency import run_in_threadpool
 
-    train(records)
+    await run_in_threadpool(train, records)
     return {"status": "success", "records_used": len(records)}
 
 
@@ -182,6 +183,7 @@ async def train_supplier_if(db) -> dict:
     ]
 
     from app.ml.supplier_risk import train_unsupervised_only
+    from fastapi.concurrency import run_in_threadpool
 
-    train_unsupervised_only(records)
+    await run_in_threadpool(train_unsupervised_only, records)
     return {"status": "success", "records_used": len(records)}

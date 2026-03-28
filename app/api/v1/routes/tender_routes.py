@@ -240,22 +240,22 @@ async def get_tender(
 
     # Enrich bids with supplier names
     bids_out = []
-    for b in tender.bids or []:
-        supplier_result = await db.execute(
-            select(Supplier).filter(Supplier.id == b.supplier_id)
-        )
-        supplier = supplier_result.scalar_one_or_none()
-        bids_out.append(
-            {
-                "id": str(b.id),
-                "supplier_id": str(b.supplier_id),
-                "supplier_name": supplier.name if supplier else None,
-                "bid_amount": b.bid_amount,
-                "is_winner": b.is_winner,
-                "similarity_score": b.similarity_score,
-                "proposal_text": b.proposal_text,
-            }
-        )
+    if tender.bids:
+        supplier_ids = [b.supplier_id for b in tender.bids]
+        suppliers_result = await db.execute(select(Supplier).filter(Supplier.id.in_(supplier_ids)))
+        suppliers_map = {s.id: s.name for s in suppliers_result.scalars().all()}
+        for b in tender.bids:
+            bids_out.append(
+                {
+                    "id": str(b.id),
+                    "supplier_id": str(b.supplier_id),
+                    "supplier_name": suppliers_map.get(b.supplier_id),
+                    "bid_amount": b.bid_amount,
+                    "is_winner": b.is_winner,
+                    "similarity_score": b.similarity_score,
+                    "proposal_text": b.proposal_text,
+                }
+            )
 
     return {
         "id": str(tender.id),
