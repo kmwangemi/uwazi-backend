@@ -27,7 +27,7 @@ import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
 from app.enums import (
@@ -1732,6 +1732,43 @@ async def seed():
         print(f"   ✓ {contract_count} contracts")
 
         await db.commit()
+
+        from app.services.risk_engine_service import compute_and_save_risk
+        from sqlalchemy.orm import selectinload
+        print("🌱 Computing risk scores for all tenders...")
+        result = await db.execute(
+            select(Tender).options(
+                selectinload(Tender.bids),
+                selectinload(Tender.entity),
+                selectinload(Tender.contract)
+            )
+        )
+        tenders = result.unique().scalars().all()
+        
+        suppliers_res = await db.execute(
+            select(Supplier).options(
+                selectinload(Supplier.directors),
+                selectinload(Supplier.contracts)
+            )
+        )
+        all_suppliers = {s.id: s for s in suppliers_res.scalars().all()}
+
+        for tender in tenders:
+            supplier = None
+            if tender.contract:
+                supplier = all_suppliers.get(tender.contract.supplier_id)
+            elif tender.bids:
+                winner = next((b for b in tender.bids if b.is_winner), tender.bids[0])
+                supplier = all_suppliers.get(winner.supplier_id)
+                
+            await compute_and_save_risk(
+                db, 
+                tender, 
+                supplier=supplier, 
+                bids=list(tender.bids or []), 
+                use_ai=False
+            )
+        print(f"   ✓ computed {len(tenders)} risk scores")
 
         print("\n✅ Seed complete!")
         print(

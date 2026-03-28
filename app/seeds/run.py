@@ -1,5 +1,5 @@
 """
-SHA Fraud Detection — Database Seeder
+Procurement Monitoring System — Database Seeder
 
 Idempotent seed script: safe to run multiple times.
   - Permissions are created if they don't exist, updated if they do.
